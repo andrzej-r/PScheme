@@ -1,6 +1,6 @@
 ﻿# -*- coding: utf-8 -*-
 # 
-# Copyright 2011 PScheme Contributors (see CONTIBUTORS for details). All rights reserved.
+# Copyright 2011 PScheme Contributors (see CONTRIBUTORS for details). All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without modification, are
 # permitted provided that the following conditions are met:
@@ -31,11 +31,11 @@ This module implements an interpreter for a subset of Scheme R5RS.
 
 User designs may require some scripting for parametrization or automation.
 Although Python interpreter is readily available (the whole program
-is written in this language) it cannot be reliably sandboxed. Executing
+is written in this language) it cannot be reliably sand-boxed. Executing
 user scripts in the context of the application would open a security hole,
 which could easily be exploited remotely (by preparing a malicious design file).
 
-Scheme was chosen for its expressivenes to simplicity ratio.
+Scheme was chosen for its expressiveness to simplicity ratio.
 """
 
 import re
@@ -55,6 +55,9 @@ class ExpressionError(Exception):
         self.msg = msg
         
     def __str__(self):
+        return unicode(self)
+        
+    def __unicode__(self):
         if not 'meta' in self.expr.__dict__:
             return 'Error: ' + self.msg
         fileName = self.expr.meta['fileName']
@@ -65,7 +68,7 @@ class ExpressionError(Exception):
         return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('~' * span)
         
     def __repr__(self):
-        return self.__str__()
+        return '<Expression Error ' + self.msg + '>'
 
 class Token(object):
     """
@@ -80,10 +83,24 @@ class Token(object):
         return self.text
         
     def __repr__(self):
-        return '<Token ' + str(self) + ', Line :' + self.line + '>'
+        return '<Token ' + str(self) + '>'
         
 class Tokenizer(object):
-    ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
+    comment = ur'(?:;.*$)'
+    lparen = ur'(?:\()'
+    rparen = ur'(?:\))'
+    number = ur'(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)'
+    symbol = ur'(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~\d+-.@]*)|\+|\-|\.\.\.)'
+    string = ur'(?:\"(?:\\"|[^"])*?\")'
+    brokenstring = ur'(?:\"(?:\\"|[^"])*$)'
+    char = ur'(?:#\\\S\w*)'
+    boolean = ur'(?:#(?:t|f))'
+    quote = ur'(?:\')'
+
+    tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote
+    
+    ptokens = re.compile(tokens, flags)
+    #ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
     #ptokens = re.compile(ur'\(|\)|(?:[\w+\-*/<>=!?.]+)|(?:#(?:t|f))|\'', flags)
     #ptokens = re.compile(ur'\(|\)', flags)
 
@@ -158,8 +175,10 @@ class Frame(object):
     
     def parseTokens(self, tokens):
         for token in tokens:
-            expr = SExpression.parseTokens(token, tokens, topLevel=True)
-            yield expr
+            try:
+                yield SExpression.parseTokens(token, tokens, topLevel=True)
+            except ExpressionError as e:
+                yield Error.make(e)
             
     def resolveSymbol(self, symbol):
         if symbol.name in self.symbols:
@@ -176,13 +195,13 @@ class Frame(object):
         self.symbols[symbol.name] = value
         
 class SExpression(object):
-    pnumber = re.compile(ur'^[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?$', flags)
-    pstring = re.compile(ur'^\"(?:\\"|[^"])*?\"$', flags)
-    pbrokenstring = re.compile(ur'^\"(?:\\"|[^"])*?$', flags)
-    pchar = re.compile(ur'^#\\\S\w*$', flags)
-    pboolean = re.compile(ur'^#(?:t|f)$', flags)
-    psymbol = re.compile(ur'^(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~\d+-.@]*)|\+|\-|\.\.\.$', flags)
-    
+    pnumber = re.compile(r'^' + Tokenizer.number + r'$', flags)
+    pstring = re.compile(r'^' + Tokenizer.string + r'$', flags)
+    pbrokenstring = re.compile(r'^' + Tokenizer.brokenstring, flags)
+    pchar = re.compile(r'^' + Tokenizer.char + r'$', flags)
+    pboolean = re.compile(r'^' + Tokenizer.boolean + r'$', flags)
+    psymbol = re.compile(r'^' + Tokenizer.symbol + r'$', flags)
+ 
     @classmethod
     def parseTokens(cls, token, tokens, topLevel=False):
         text = token.text
@@ -193,7 +212,7 @@ class SExpression(object):
         elif SExpression.pstring.match(text):
             expr = String.parseToken(token)
         elif SExpression.pbrokenstring.match(text):
-            raise(ExpressionError(token, 'Unterminated string ' + text))
+            raise(ExpressionError(token, 'Unterminated string ')) # + text))
         elif SExpression.pchar.match(text):
             expr = Char.parseToken(token)
         elif SExpression.pboolean.match(text):
@@ -557,6 +576,22 @@ class Symbol(SExpression):
     def __eq__(self, other):
         return (other is self) or (type(other) == type(self) and other.name == self.name)
 
+class Error(SExpression):
+    """
+    A 'placeholder' expression serving only as a storage for errors that occurred during at
+    the token parsing stage.
+    """
+    
+    @classmethod
+    def make(cls, exception):
+        self = cls()
+        self.exception = exception
+        return self
+    
+    def eval(self, frame):
+        raise self.exception
+
+
 class Null(SExpression):
     cache = None
         
@@ -628,23 +663,23 @@ class Pair(SExpression):
     
     @classmethod
     def parseTokens(cls, token, tokens, topLevel=False):
-        self = None
-        tail = None
-        elements = []
-        for t in tokens:
-            if t.text != u')':
-                expr = SExpression.parseTokens(t, tokens)
-                if not self:
-                    self = cls.make(expr, Null.make())
-                    tail = self
-                else:
+        try:
+            #print token.text
+            self = cls.make(Null.make(), Null.make())
+            tail = self
+            for t in tokens:
+                #print t.text
+                if t.text != u')':
+                    expr = SExpression.parseTokens(t, tokens)
                     tail.cdr = cls.make(expr, Null.make())
                     tail = tail.cdr
-            else:
-                self.meta = token.meta
-                self.topLevel = topLevel
-                return self
-        raise ExpressionError(token, 'Unterminated list.')
+                else:
+                    self = self.cdr #discard empty car
+                    self.meta = token.meta
+                    self.topLevel = topLevel
+                    return self
+        except StopIteration:
+            raise ExpressionError(token, 'Unterminated list.')
         
     def toList(self):
         lst = [self.car]
@@ -657,8 +692,6 @@ class Pair(SExpression):
         return lst + [cdr]
         
     def eval(self, frame):
-        if not self.cdr.isList():
-            raise ExpressionError(self, '"eval": improper argument list.')
         if self.car.isSpecialSyntax():
             return self.car.apply(self.cdr.toList(), self, frame)
         args = []
@@ -666,6 +699,8 @@ class Pair(SExpression):
         while cdr.isPair():
             args.append(cdr.car.eval(frame))
             cdr = cdr.cdr
+        if not cdr.isNull():
+            raise ExpressionError(self, '"eval": improper argument list.')
         op = self.car.eval(frame)
         #args = Pair.make(self.car, Null.make())
         #cdr = args.cdr
@@ -765,7 +800,6 @@ class Pair(SExpression):
             oCdr = oCdr.cdr
 
 class SpecialSyntax(SExpression):
-    name = 'special-syntax'
     object = None
     
     specialForms = {
@@ -802,10 +836,9 @@ class SpecialSyntax(SExpression):
         return True
         
     def __str__(self):
-        return '#<SpecialSyntax ' + self.name + '>'
+        return '#<' + self.__class__.__name__ + '>'
     
 class QuoteForm(SpecialSyntax):
-    name = 'quote'
     def apply(self, operands, callingForm, frame):
         if len(operands) != 1:
             raise ExpressionError(self, '"quote" requires 1 argument, ' + str(len(operands)) + ' given.')
@@ -815,7 +848,6 @@ class QuoteForm(SpecialSyntax):
 
 
 class DefineForm(SpecialSyntax):
-    name = 'define'
     def apply(self, operands, callingForm, frame):
         #if not self.topLevel: # and not self.inBody:
         #    raise ExpressionError(self, '"define" only allowed at the top level or in a body of a procedure')
@@ -838,7 +870,6 @@ class DefineForm(SpecialSyntax):
             return Nil.make()
 
 class CondForm(SpecialSyntax):
-    name = 'cond'
     def apply(self, operands, callingForm, frame):
         if len(operands) < 2 or len(operands) > 3:
             raise ExpressionError(self, '"if" requires at least 2 and at most 3 arguments, ' + str(len(operands)) + ' given.')
@@ -853,7 +884,6 @@ class CondForm(SpecialSyntax):
         return res
 
 class IfForm(SpecialSyntax):
-    name = 'if'
     def apply(self, operands, callingForm, frame):
         if len(operands) < 2 or len(operands) > 3:
             raise ExpressionError(self, '"if" requires at least 2 and at most 3 arguments, ' + str(len(operands)) + ' given.')
@@ -868,11 +898,11 @@ class IfForm(SpecialSyntax):
         return res
 
 class AndForm(SpecialSyntax):
-    name = 'and'
-
+    pass
+    
 class OrForm(SpecialSyntax):
-    name = 'or'
-
+    pass
+    
 class Procedure(SExpression):
     def apply(self, operands, callingForm):
         pass
@@ -884,7 +914,6 @@ class Procedure(SExpression):
         raise ExpressionError(self, 'Procedure should not be evaluated directly')
     
 class PrimitiveProcedure(Procedure):
-    name = 'primitive-procedure'
     object = None
 
     primitiveFunctions = {
@@ -918,10 +947,9 @@ class PrimitiveProcedure(Procedure):
         return cls.object
     
     def __str__(self):
-        return '#<PrimitiveProcedure \'' + self.name + '\'>'
+        return '#<' + self.__class__.__name__ + '>'
     
 class ConsProcedure(PrimitiveProcedure):
-    name = 'cons'
     def apply(self, operands, callingForm):
         if len(operands) != 2:
             raise ExpressionError(callingForm, '"cons" requires 2 arguments, provided ' + str(len(operands)) + '.')
@@ -932,7 +960,6 @@ class ConsProcedure(PrimitiveProcedure):
         return res
 
 class CarProcedure(PrimitiveProcedure):
-    name = 'car'
     def apply(self, operands, callingForm):
         if len(operands) != 1:
             raise ExpressionError(callingForm, '"car" requires 1 argument, provided ' + str(len(operands)) + '.')
@@ -944,7 +971,6 @@ class CarProcedure(PrimitiveProcedure):
         return res
 
 class CdrProcedure(PrimitiveProcedure):
-    name = 'cdr'
     def apply(self, operands, callingForm):
         if len(operands) != 1:
             raise ExpressionError(callingForm, '"cdr" requires 1 argument, provided ' + str(len(operands)) + '.')
@@ -956,7 +982,6 @@ class CdrProcedure(PrimitiveProcedure):
         return res
             
 class NotProcedure(PrimitiveProcedure):
-    name = 'not'
     def apply(self, operands, callingForm):
         if len(operands) != 1:
             raise ExpressionError(callingForm, '"not" requires 1 argument, provided ' + str(len(operands)) + '.')
@@ -968,7 +993,6 @@ class NotProcedure(PrimitiveProcedure):
         return res
 
 class EqProcedure(PrimitiveProcedure):
-    name = 'eq?'
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '"eq?" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -982,7 +1006,6 @@ class EqProcedure(PrimitiveProcedure):
         return res
         
 class EqvProcedure(PrimitiveProcedure):
-    name = 'eqv?'
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '"eqv?" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -996,7 +1019,6 @@ class EqvProcedure(PrimitiveProcedure):
         return res
         
 class EqualProcedure(PrimitiveProcedure):
-    name = 'equal?'
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '"equal?" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1010,7 +1032,6 @@ class EqualProcedure(PrimitiveProcedure):
         return res
         
 class NumEqProcedure(PrimitiveProcedure):
-    name = '='
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '"=" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1028,7 +1049,6 @@ class NumEqProcedure(PrimitiveProcedure):
         return res
         
 class NumLTProcedure(PrimitiveProcedure):
-    name = '<'
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '"<" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1047,7 +1067,6 @@ class NumLTProcedure(PrimitiveProcedure):
         return res
         
 class NumLTEProcedure(PrimitiveProcedure):
-    name = '<='
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '"<=" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1066,7 +1085,6 @@ class NumLTEProcedure(PrimitiveProcedure):
         return res
         
 class NumGTProcedure(PrimitiveProcedure):
-    name = '>'
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '">" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1085,7 +1103,6 @@ class NumGTProcedure(PrimitiveProcedure):
         return res
         
 class NumGTEProcedure(PrimitiveProcedure):
-    name = '>='
     def apply(self, operands, callingForm):
         if len(operands) < 2:
             raise ExpressionError(callingForm, '">=" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1104,7 +1121,6 @@ class NumGTEProcedure(PrimitiveProcedure):
         return res
         
 class SumProcedure(PrimitiveProcedure):
-    name = '+'
     def apply(self, operands, callingForm):
         value = 0
         for n in operands:
@@ -1116,7 +1132,6 @@ class SumProcedure(PrimitiveProcedure):
         return res
         
 class SubtractProcedure(PrimitiveProcedure):
-    name = '-'
     def apply(self, operands, callingForm):
         if len(operands) < 1:
             raise ExpressionError(callingForm, '"-" requires at least 1 argument, provided ' + str(len(operands)) + '.')
@@ -1135,7 +1150,6 @@ class SubtractProcedure(PrimitiveProcedure):
         return res
 
 class MultiplyProcedure(PrimitiveProcedure):
-    name = '*'
     def apply(self, operands, callingForm):
         value = 1
         for n in operands:
@@ -1147,7 +1161,6 @@ class MultiplyProcedure(PrimitiveProcedure):
         return res
         
 class DivideProcedure(PrimitiveProcedure):
-    name = '/'
     def apply(self, operands, callingForm):
         if len(operands) < 1:
             raise ExpressionError(callingForm, '"/" requires at least 1 argument, provided ' + str(len(operands)) + '.')
@@ -1166,7 +1179,6 @@ class DivideProcedure(PrimitiveProcedure):
         return res
 
 class ModuloProcedure(PrimitiveProcedure):
-    name = 'modulo'
     def apply(self, operands, callingForm):
         if len(operands) != 2:
             raise ExpressionError(callingForm, '"modulo" requires 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1179,7 +1191,6 @@ class ModuloProcedure(PrimitiveProcedure):
         return res
 
 class WriteCharProcedure(PrimitiveProcedure):
-    name = 'write-char'
     def apply(self, operands, callingForm):
         if not (1 <= len(operands) <= 2):
             raise ExpressionError(callingForm, '"write-char" requires 1 or 2 arguments, provided ' + str(len(operands)) + '.')
@@ -1189,7 +1200,6 @@ class WriteCharProcedure(PrimitiveProcedure):
         return Nil.make()
 
 class DisplayProcedure(PrimitiveProcedure):
-    name = 'display'
     def apply(self, operands, callingForm):
         if not (1 <= len(operands) <= 2):
             raise ExpressionError(callingForm, '"display" requires 1 or 2 arguments, provided ' + str(len(operands)) + '.')

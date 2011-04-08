@@ -29,13 +29,17 @@ class PSchemeTest(unittest.TestCase):
         t = Tokenizer('tests')
         e = list(f.read('-12.345e-6 -.12e3 +123.e+4 -1234 +12', t))
         self.assertEqual(e, [Number.make(-12.345e-6), Number.make(-0.12e3), Number.make(123e4), Number.make(-1234), Number.make(12)])
+        e = list(f.read('()', t))
+        self.assertEqual(e, [Null.make()])
         e = list(f.read('(+ 123.0 123)', t))
         self.assertEqual(e, [Pair.makeFromList([Symbol.make('+'), Number.make(123.), Number.make(123)])])
         e = list(f.read('-12.345e-6 -.12e3 +123.e+4 -1234 +12 (+ 123.0 123)', t))
         self.assertEqual(e, [Number.make(-12.345e-6), Number.make(-0.12e3), Number.make(123e4), Number.make(-1234), Number.make(12), Pair.makeFromList([Symbol.make('+'), Number.make(123.), Number.make(123)])])
         e = list(f.read('"asd" "asd\\"dsa"', t))
         self.assertEqual(e, [String.make('asd',), String.make('asd\\"dsa')])
-        self.assertRaises(ExpressionError, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string
+        #self.assertRaises(ExpressionError, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string, changed error handling
+        e = list(f.read('"asd" "asd\\"dsa""123', t))
+        self.assertEqual(map(type, e), [String, String, Error])
         e = list(f.read('#t #f', t))
         self.assertEqual(e, [Boolean.make(True,), Boolean.make(False)])
 

@@ -32,7 +32,7 @@ import os
 def input():
     try:
         while True:
-            yield raw_input('> ').decode('utf-8')
+            yield raw_input('> ')
     except KeyboardInterrupt:
         return
         

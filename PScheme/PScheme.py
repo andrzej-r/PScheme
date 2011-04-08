@@ -65,7 +65,7 @@ class ExpressionError(Exception):
         lineNo = str(self.expr.meta['lineNo'])
         start = self.expr.meta['colStart']
         span = self.expr.meta['colEnd'] - start
-        return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('~' * span)
+        return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
         
     def __repr__(self):
         return '<Expression Error ' + self.msg + '>'
@@ -96,8 +96,9 @@ class Tokenizer(object):
     char = ur'(?:#\\\S\w*)'
     boolean = ur'(?:#(?:t|f))'
     quote = ur'(?:\')'
-
-    tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote
+    other = ur'(?:\S+)'
+    
+    tokens = comment + u'|' + lparen + u'|' + rparen + u'|' + number + u'|' + symbol + u'|' + string + u'|' + brokenstring + u'|' + char + u'|' + boolean + u'|' + quote + u'|' + other
     
     ptokens = re.compile(tokens, flags)
     #ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
@@ -115,7 +116,7 @@ class Tokenizer(object):
         """
         #print line
         self.lineNo += 1
-        for token_match in self.ptokens.finditer(line):
+        for token_match in self.ptokens.finditer(line.decode('utf8')):
             if not token_match.group().startswith(u';'):
                 meta = {}
                 meta['fileName'] = self.fileName
@@ -230,7 +231,6 @@ class SExpression(object):
                 expr = Symbol.parseToken(token)
         else:
             raise(ExpressionError(token, 'Unrecognized token "' + text + '"'))
-        #expr.meta = token.meta
         return expr
             
     def eval(self, frame):
@@ -242,9 +242,9 @@ class SExpression(object):
     def __repr__(self):
         return str(self)
         
-    def equal(self, other):
-        return self == other
-    
+    def isSelfEval(self):
+        return False
+        
     def isBoolean(self):
         return False
         
@@ -300,6 +300,9 @@ class SelfEval(SExpression):
     def eval(self, frame):
         return self
         
+    def isSelfEval(self):
+        return True
+        
     def __str__(self):
         return self.value
         
@@ -328,8 +331,11 @@ class Char(SelfEval):
     
     @classmethod
     def make(cls, char):
+        if char in cls.cache:
+            return cls.cache[char]
         self = cls()
         self.value = char
+        cls.cache[char] = self
         return self
     
     @classmethod
@@ -337,7 +343,7 @@ class Char(SelfEval):
         #match = cls.pchar.match(token.text)
         #char = cls.make(match.group(1))
         char = cls.make(token.text)
-        char.meta = token.meta
+        #char.meta = token.meta
         return char
 
     def isChar(self):
@@ -355,7 +361,7 @@ class Char(SelfEval):
         return self.value
 
     def __eq__(self, other):
-        return (other is self) or (type(other) == type(self) and other.value == self.value)
+        return (other is self) # not needed because of caching  # or (type(other) == type(self) and other.value == self.value)
         
         
 class String(SelfEval):
@@ -433,7 +439,8 @@ class Number(SelfEval):
         if (text.find('.') >= 0 or text.find('e') >= 0):
             return RealNumber.make(float(text), token.meta)
         else:
-            return IntegerNumber.makeUnCached(long(text), token.meta)
+            return IntegerNumber.make(long(text))
+            #return IntegerNumber.makeUnCached(long(text), token.meta)
 
     def isNumber(self):
         return True
@@ -442,12 +449,12 @@ class Number(SelfEval):
         return str(self.value)
                 
 class IntegerNumber(Number):
-    cache = [None]*1024
+    cache = [None]*256
     
     @classmethod
     def make(cls, value):
         "Construct an ``IntegerNumber`` object. Cache some of them for efficiency."
-        if 0 <= value < 1024:
+        if 0 <= value < 256:
             cached = cls.cache[value]
             if cached:
                 #print '*', cached.value
@@ -462,16 +469,16 @@ class IntegerNumber(Number):
         #print ' ', self.value
         return self
 
-    @classmethod
-    def makeUnCached(cls, value, meta):
-        """
-        Construct an ``IntegerNumber`` object without caching.
-        Unique objects are needed when ``meta`` is attached.
-        """
-        self = cls()
-        self.value = value
-        self.meta = meta
-        return self
+    #@classmethod
+    #def makeUnCached(cls, value, meta):
+    #    """
+    #    Construct an ``IntegerNumber`` object without caching.
+    #    Unique objects are needed when ``meta`` is attached.
+    #    """
+    #    self = cls()
+    #    self.value = value
+    #    self.meta = meta
+    #    return self
 
     def isInteger(self):
         return True
@@ -480,6 +487,7 @@ class IntegerNumber(Number):
         return True
         
     def __eq__(self, other):
+        #because caching is partial full comparison is still needed
         return (other is self) or (type(other) == type(self) and other.value == self.value)
 
 class RealNumber(Number):
@@ -512,19 +520,21 @@ class Boolean(SelfEval):
         cls.cache[value] = self
         return self
 
-    @classmethod
-    def makeUnCached(cls, value, meta):
-        self = cls()
-        self.value = value
-        self.meta = meta
-        return self
+    #@classmethod
+    #def makeUnCached(cls, value, meta):
+    #    self = cls()
+    #    self.value = value
+    #    self.meta = meta
+    #    return self
 
     @classmethod
     def parseToken(cls, token, tokens=[]):
         if (token.text == '#f'):
-            bool = Boolean.makeUnCached(False, token.meta)
+            bool = Boolean.make(False)
+            #bool = Boolean.makeUnCached(False, token.meta)
         else:
-            bool = Boolean.makeUnCached(True, token.meta)
+            bool = Boolean.make(True)
+            #bool = Boolean.makeUnCached(True, token.meta)
         return bool
 
     def __str__(self):
@@ -537,7 +547,8 @@ class Boolean(SelfEval):
         return True
         
     def __eq__(self, other):
-        return (other is self) or (type(other) == type(self) and other.value == self.value) or (type(other) != type(self) and self.value)
+        return (other is self) or (type(other) != type(self) and self.value)
+        #return (other is self) or (type(other) == type(self) and other.value == self.value) or (type(other) != type(self) and self.value)
         #return (other is self) or (other.value == self.value) or (not other.isBoolean() and self.value)
         
 class Symbol(SExpression):
@@ -552,16 +563,17 @@ class Symbol(SExpression):
         cls.cache[name] = self
         return self
         
-    @classmethod
-    def makeUnCached(cls, name, meta):
-        self = cls()
-        self.name = name
-        self.meta = meta
-        return self
+    #@classmethod
+    #def makeUnCached(cls, name, meta):
+    #    self = cls()
+    #    self.name = name
+    #    self.meta = meta
+    #    return self
         
     @classmethod
     def parseToken(cls, token):
-        sym = Symbol.makeUnCached(token.text, token.meta)
+        sym = Symbol.make(token.text)
+        #sym = Symbol.makeUnCached(token.text, token.meta)
         return sym
         
     def eval(self, frame):
@@ -574,7 +586,7 @@ class Symbol(SExpression):
         return self.name
 
     def __eq__(self, other):
-        return (other is self) or (type(other) == type(self) and other.name == self.name)
+        return (other is self) # not needed because of chaching # or (type(other) == type(self) and other.name == self.name)
 
 class Error(SExpression):
     """
@@ -591,6 +603,8 @@ class Error(SExpression):
     def eval(self, frame):
         raise self.exception
 
+    def __str__(self):
+        return '<ErrorExpr ' + str(self.exception) + '>'
 
 class Null(SExpression):
     cache = None
@@ -603,15 +617,18 @@ class Null(SExpression):
         cls.cache = self
         return self
     
-    @classmethod
-    def makeUnCached(cls, meta):
-        self = cls()
-        self.meta = meta
-        return self
+    #@classmethod
+    #def makeUnCached(cls, meta):
+    #    self = cls()
+    #    self.meta = meta
+    #    return self
     
     def eval(self, frame):
         raise ExpressionError(self, 'Empty application.')
 
+    def evalElements(self, frame):
+        return self
+        
     def toList(self):
         return []
         
@@ -624,6 +641,9 @@ class Null(SExpression):
     def __len__(self):
         return 0
         
+    def __nonzero__(self):
+        return True
+        
     def __getitem__(self, index):
         raise IndexError('(null) index out of range')
 
@@ -634,7 +654,7 @@ class Null(SExpression):
         return '()'
         
     def __eq__(self, other):
-        return (other is self) or (type(other) == type(self))
+        return (other is self)# or (type(other) == type(self))
 
 class Pair(SExpression):
     @classmethod
@@ -693,26 +713,26 @@ class Pair(SExpression):
         
     def eval(self, frame):
         if self.car.isSpecialSyntax():
-            return self.car.apply(self.cdr.toList(), self, frame)
-        args = []
-        cdr = self.cdr
-        while cdr.isPair():
-            args.append(cdr.car.eval(frame))
-            cdr = cdr.cdr
-        if not cdr.isNull():
-            raise ExpressionError(self, '"eval": improper argument list.')
+            return self.car.apply(self.cdr, self, frame)
+        args = self.cdr.evalElements(frame)
         op = self.car.eval(frame)
-        #args = Pair.make(self.car, Null.make())
-        #cdr = args.cdr
-        #for e in self.cdr:
-        #    cdr = Pair.make(e.eval(frame), Null.make())
-        #    cdr = cdr.cdr
-        #args = args.cdr
         if op.isProcedure():
-            #return op.apply(self.cdr, self)
             return op.apply(args, self)
         raise ExpressionError(self, 'procedure application, first operand is not a procedure.' + str(operator))
 
+    def evalElements(self, frame):
+        res = self.make(self.car.eval(frame), Null.make())
+        cdr = res
+        sCdr = self.cdr
+        while sCdr.isPair():
+            cdr.cdr = self.make(sCdr.car.eval(frame), Null.make())
+            cdr = cdr.cdr
+            sCdr = sCdr.cdr
+        if not sCdr.isNull():
+            raise ExpressionError(self, '"eval": improper operand list.')
+            #cdr = sCdr.eval(frame)
+        return res
+        
     def isPair(self):
         return True
         
@@ -721,9 +741,6 @@ class Pair(SExpression):
         while cdr.isPair():
             cdr = cdr.cdr
         return cdr.isNull()
-        
-    def len(self):
-        return len(self)
         
     def __len__(self):
         len = 1
@@ -840,10 +857,9 @@ class SpecialSyntax(SExpression):
     
 class QuoteForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame):
-        if len(operands) != 1:
-            raise ExpressionError(self, '"quote" requires 1 argument, ' + str(len(operands)) + ' given.')
-        res = copy(operands[0])
-        #res.meta = callingForm.meta
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"quote" requires 1 operand, ' + str(len(operands)) + ' given.')
+        res = operands.car
         return res
 
 
@@ -851,50 +867,39 @@ class DefineForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame):
         #if not self.topLevel: # and not self.inBody:
         #    raise ExpressionError(self, '"define" only allowed at the top level or in a body of a procedure')
-        if len(operands) < 2:
-            raise ExpressionError(self, '"define" requires at least 2 arguments, ' + str(len(operands)) + ' given.')
-        firstArg = operands[0]
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"define" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        firstArg = operands.car
         if not firstArg.isSymbol() and not firstArg.isPair():
-            raise ExpressionError(self, '"define": Invalid type of the first argument')
+            raise ExpressionError(callingForm, '"define": Invalid type of the first operand')
         if firstArg.isSymbol():
-            frame.addSymbol(firstArg, operands[1].eval(frame))
+            frame.addSymbol(firstArg, operands.cdr.car.eval(frame))
             return Nil.make()
         if firstArg.isPair():
             if not firstArg.car.isSymbol():
-                raise ExpressionError(firstArg, 'Invalid procedure name in "define"')
+                raise ExpressionError(callingForm, 'Invalid procedure name in "define"')
             procName = firstArg.car
-            formals = firstArg.cdr.toList()
-            body = operands[1:]
+            formals = firstArg.cdr #.toList()
+            body = operands.cdr
             procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
             frame.addSymbol(procName, procedure)
             return Nil.make()
 
 class CondForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame):
-        if len(operands) < 2 or len(operands) > 3:
-            raise ExpressionError(self, '"if" requires at least 2 and at most 3 arguments, ' + str(len(operands)) + ' given.')
-        firstArg = operands[0].eval(frame)
-        if not firstArg.isBoolean() or firstArg.value: #True
-            res = operands[1].eval(frame)
-        elif len(operands) == 3:
-            res = operands[2].eval(frame)
-        else:
-            res = Nil.make()
-        #res.meta = callingForm.meta
-        return res
+        pass
 
 class IfForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame):
-        if len(operands) < 2 or len(operands) > 3:
-            raise ExpressionError(self, '"if" requires at least 2 and at most 3 arguments, ' + str(len(operands)) + ' given.')
-        firstArg = operands[0].eval(frame)
+        if operands.isNull() or operands.cdr.isNull() or (operands.cdr.cdr.isPair() and operands.cdr.cdr.cdr.isPair()):
+            raise ExpressionError(callingForm, '"if" requires 2 or 3 operands, ' + str(len(operands)) + ' given.')
+        firstArg = operands.car.eval(frame)
         if not firstArg.isBoolean() or firstArg.value: #True
-            res = operands[1].eval(frame)
-        elif len(operands) == 3:
-            res = operands[2].eval(frame)
+            res = operands.cdr.car.eval(frame)
+        elif operands.cdr.cdr.isPair():
+            res = operands.cdr.cdr.car.eval(frame)
         else:
             res = Nil.make()
-        #res.meta = callingForm.meta
         return res
 
 class AndForm(SpecialSyntax):
@@ -951,173 +956,197 @@ class PrimitiveProcedure(Procedure):
     
 class ConsProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) != 2:
-            raise ExpressionError(callingForm, '"cons" requires 2 arguments, provided ' + str(len(operands)) + '.')
-        expr1 = operands[0]
-        expr2 = operands[1]
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"cons" requires 2 operands, provided ' + str(len(operands)) + '.')
+        expr1 = operands.car
+        expr2 = operands.cdr.car
         res = Pair.make(expr1, expr2)
         #res.meta = callingForm.meta
         return res
 
 class CarProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) != 1:
-            raise ExpressionError(callingForm, '"car" requires 1 argument, provided ' + str(len(operands)) + '.')
-        arg = operands[0]
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"car" requires 1 operand, provided ' + str(len(operands)) + '.')
+        arg = operands.car
         if not arg.isPair():
-            raise ExpressionError(callingForm, '"car" argument must be a pair.')
+            raise ExpressionError(callingForm, '"car" operand must be a pair.')
         res = arg.car
-        #res.meta = callingForm.meta
         return res
 
 class CdrProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) != 1:
-            raise ExpressionError(callingForm, '"cdr" requires 1 argument, provided ' + str(len(operands)) + '.')
-        arg = operands[0]
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"cdr" requires 1 operand, provided ' + str(len(operands)) + '.')
+        arg = operands.car
         if not arg.isPair():
-            raise ExpressionError(callingForm, '"cdr" argument must be a pair.')
+            raise ExpressionError(callingForm, '"cdr" operand must be a pair.')
         res = arg.cdr
-        #res.meta = callingForm.meta
         return res
             
 class NotProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) != 1:
-            raise ExpressionError(callingForm, '"not" requires 1 argument, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"not" requires 1 operand, provided ' + str(len(operands)) + '.')
+        arg = operands.car
         value = False
-        if operands[0].isBoolean():
-            value = not(operands[0].value)
+        if arg.isBoolean():
+            value = not(arg.value)
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
 
 class EqProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '"eq?" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"eq?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        first = operands[0]
-        for n in operands[1:]:
-            if not n is first:
+        first = operands.car
+        cdr = operands.cdr
+        while cdr.isPair():
+            other = cdr.car
+            if first.isNull() or first.isSymbol():
+                if first != other:
+                    value = False
+            elif not cdr.car is first:
                 value = False
+            cdr = cdr.cdr
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class EqvProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '"eqv?" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"eqv?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        first = operands[0]
-        for n in operands[1:]:
-            if n != first:
+        first = operands.car
+        cdr = operands.cdr
+        while cdr.isPair():
+            other = cdr.car
+            if first.isNumber() and other.isNumber():
+                if first.value != other.value:
+                    value = False
+                if first.isExact() != other.isExact():
+                    value = False
+            elif first.isNull() or first.isChar() or first.isSymbol():
+                if first != other:
+                    value = False
+            elif not first is other:
                 value = False
+            cdr = cdr.cdr
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class EqualProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '"equal?" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"equal?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        first = operands[0]
-        for n in operands[1:]:
-            if n != first:
+        first = operands.car
+        cdr = operands.cdr
+        while cdr.isPair():
+            if cdr.car != first:
                 value = False
+            cdr = cdr.cdr
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class NumEqProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '"=" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        first = operands[0]
+        first = operands.car
         if not first.isNumber():
-            raise ExpressionError(first, '"' + str(first) + '" is not a Number')
-        for n in operands[1:]:
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        cdr = operands.cdr
+        while cdr.isPair():
+            n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
+                raise ExpressionError(callingForm, 'operand is not a Number')
             if n.value != first.value:
                 value = False
+            cdr = cdr.cdr
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class NumLTProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '"<" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"<" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        previous = operands[0]
+        previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(previous, '"' + str(previous) + '" is not a Number')
-        for n in operands[1:]:
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        cdr = operands.cdr
+        while cdr.isPair():
+            n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
-            if n.value <= previous.value:
+                raise ExpressionError(callingForm, 'operand is not a Number')
+            if previous.value >= n.value:
                 value = False
+            cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class NumLTEProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '"<=" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"<=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        previous = operands[0]
+        previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(previous, '"' + str(previous) + '" is not a Number')
-        for n in operands[1:]:
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        cdr = operands.cdr
+        while cdr.isPair():
+            n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
-            if n.value < previous.value:
+                raise ExpressionError(callingForm, 'operand is not a Number')
+            if previous.value > n.value:
                 value = False
+            cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class NumGTProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '">" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '">" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        previous = operands[0]
+        previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(previous, '"' + str(previous) + '" is not a Number')
-        for n in operands[1:]:
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        cdr = operands.cdr
+        while cdr.isPair():
+            n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
-            if n.value >= previous.value:
+                raise ExpressionError(callingForm, 'operand is not a Number')
+            if previous.value <= n.value:
                 value = False
+            cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class NumGTEProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 2:
-            raise ExpressionError(callingForm, '">=" requires at least 2 arguments, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '">=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
-        previous = operands[0]
+        previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(previous, '"' + str(previous) + '" is not a Number')
-        for n in operands[1:]:
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        cdr = operands.cdr
+        while cdr.isPair():
+            n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
-            if n.value > previous.value:
+                raise ExpressionError(callingForm, 'operand is not a Number')
+            if previous.value < n.value:
                 value = False
+            cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class SumProcedure(PrimitiveProcedure):
@@ -1125,28 +1154,26 @@ class SumProcedure(PrimitiveProcedure):
         value = 0
         for n in operands:
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
+                raise ExpressionError(callingForm, 'operand is not a Number')
             value += n.value
         res = Number.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class SubtractProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 1:
-            raise ExpressionError(callingForm, '"-" requires at least 1 argument, provided ' + str(len(operands)) + '.')
-        if not operands[0].isNumber():
-            raise ExpressionError(operands[0], '"' + str(operands[0]) + '" is not a Number')
-        if len(operands) == 1:
-            res = Number.make(-operands[0].value)
+        if operands.isNull():
+            raise ExpressionError(callingForm, '"-" requires at least 1 operand, provided ' + str(len(operands)) + '.')
+        if not operands.car.isNumber():
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        if operands.cdr.isNull():
+            res = Number.make(-operands.car.value)
         else:
-            value = operands[0].value
-            for n in operands[1:]:
+            value = operands.car.value
+            for n in operands.cdr:
                 if not n.isNumber():
-                    raise ExpressionError(n, '"' + str(n) + '" is not a Number')
+                    raise ExpressionError(callingForm, 'operand is not a Number')
                 value -= n.value
             res = Number.make(value)
-        #res.meta = callingForm.meta
         return res
 
 class MultiplyProcedure(PrimitiveProcedure):
@@ -1154,56 +1181,53 @@ class MultiplyProcedure(PrimitiveProcedure):
         value = 1
         for n in operands:
             if not n.isNumber():
-                raise ExpressionError(n, '"' + str(n) + '" is not a Number')
+                raise ExpressionError(callingForm, 'operand is not a Number')
             value *= n.value
         res = Number.make(value)
-        #res.meta = callingForm.meta
         return res
         
 class DivideProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) < 1:
-            raise ExpressionError(callingForm, '"/" requires at least 1 argument, provided ' + str(len(operands)) + '.')
-        if not operands[0].isNumber():
-            raise ExpressionError(operands[0], '"' + str(operands[0]) + '" is not a Number')
-        if len(operands) == 1:
-            res = Number.make(1/operands[0].value)
+        if operands.isNull():
+            raise ExpressionError(callingForm, '"/" requires at least 1 operand, provided ' + str(len(operands)) + '.')
+        if not operands.car.isNumber():
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        if operands.cdr.isNull():
+            res = Number.make(1.0/operands[0].value)
         else:
-            value = operands[0].value
-            for n in operands[1:]:
+            value = float(operands.car.value)
+            for n in operands.cdr:
                 if not n.isNumber():
-                    raise ExpressionError(n, '"' + str(n) + '" is not a Number')
+                    raise ExpressionError(callingForm, 'operand is not a Number')
                 value /= n.value
             res = Number.make(value)
-        #res.meta = callingForm.meta
         return res
 
 class ModuloProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if len(operands) != 2:
-            raise ExpressionError(callingForm, '"modulo" requires 2 arguments, provided ' + str(len(operands)) + '.')
-        if not operands[0].isNumber():
-            raise ExpressionError(operands[0], '"' + str(operands[0]) + '" is not a Number')
-        if not operands[1].isNumber():
-            raise ExpressionError(operands[1], '"' + str(operands[1]) + '" is not a Number')
-        res = Number.make(operands[0].value % operands[1].value)
-        #res.meta = callingForm.meta
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"modulo" requires 2 operands, provided ' + str(len(operands)) + '.')
+        if not operands.car.isNumber():
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        if not operands.cdr.car.isNumber():
+            raise ExpressionError(callingForm, 'operand is not a Number')
+        res = Number.make(operands.car.value % operands.cdr.car.value)
         return res
 
 class WriteCharProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if not (1 <= len(operands) <= 2):
-            raise ExpressionError(callingForm, '"write-char" requires 1 or 2 arguments, provided ' + str(len(operands)) + '.')
-        if not operands[0].isChar():
-            raise ExpressionError(operands[0], '"' + unicode(operands[0]) + '" is not a Character')
-        sys.stdout.write(str(operands[0]))
+        if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
+            raise ExpressionError(callingForm, '"write-char" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
+        if not operands.car.isChar():
+            raise ExpressionError(callingForm, 'operand is not a Character')
+        sys.stdout.write(str(operands.car))
         return Nil.make()
 
 class DisplayProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
-        if not (1 <= len(operands) <= 2):
-            raise ExpressionError(callingForm, '"display" requires 1 or 2 arguments, provided ' + str(len(operands)) + '.')
-        sys.stdout.write(unicode(operands[0]))
+        if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
+            raise ExpressionError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
+        sys.stdout.write(unicode(operands.car))
         return Nil.make()
 
 class CompoundProcedure(Procedure):
@@ -1220,25 +1244,19 @@ class CompoundProcedure(Procedure):
     def checkFormals(self):
         for f in self.formals:
             if not f.isSymbol():
-                raise ExpressionError(f, 'Invalid procedure argument name')
+                raise ExpressionError(f, 'Invalid procedure operand name')
         
-    def bind(self, arguments, callingForm):
-        if len(self.formals) != len(arguments):
-            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + ', provided ' + str(len(arguments)) + '.')
+    def bind(self, operands, callingForm):
+        if len(self.formals) != len(operands):
+            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + ', provided ' + str(len(operands)) + '.')
         newFrame = Frame(self.frame)
-        for t in zip(self.formals, arguments):
+        for t in zip(self.formals, operands):
             newFrame.addSymbol(t[0], t[1])
         return newFrame
         
     def apply(self, operands, callingForm):
-        #if len(operands) < 1:
-        #    raise ExpressionError(self, '"apply" requires at least 1 operand, ' + str(len(operands)-1) + ' given.')
-        #newOperands = operands[0:-1] + operands[-1]
-        #if operator.isProcedure():
         newFrame = self.bind(operands, callingForm)
         return self.body.eval(newFrame)
-        #else:
-        #    raise ExpressionError(self, '"apply": first operand is not a procedure.' + str(operator))
     
     def __str__(self):
         formals = ''

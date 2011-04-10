@@ -366,7 +366,7 @@ class Char(SelfEval):
         
 class String(SelfEval):
     flags2 = flags #| re.M
-    pstring = re.compile(r'^\"((?:[^"]|\")+)\"$', flags)
+    pstring = re.compile(r'^\"((?:[^"]|\")*)\"$', flags)
     p1  = re.compile(r'\\\\', flags2)
     p2  = re.compile(r'\\"', flags2)
     p3  = re.compile(r'\\a', flags2)

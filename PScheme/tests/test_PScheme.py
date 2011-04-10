@@ -1,6 +1,6 @@
 ﻿import unittest
 
-from PScheme import *
+from ..PScheme import *
 
 class PSchemeTest(unittest.TestCase):
     def setUp(self):
@@ -39,7 +39,7 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(e, [String.make('asd',), String.make('asd\\"dsa')])
         #self.assertRaises(ExpressionError, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string, changed error handling
         e = list(f.read('"asd" "asd\\"dsa""123', t))
-        self.assertEqual(map(type, e), [String, String, Error])
+        self.assertEqual(list(map(type, e)), [String, String, Error])
         e = list(f.read('#t #f', t))
         self.assertEqual(e, [Boolean.make(True,), Boolean.make(False)])
 
@@ -77,7 +77,7 @@ class PSchemeTest(unittest.TestCase):
         t = Tokenizer('tests')
         exp = list(f.read('(define plus +)(define (b a) (plus a a))', t))
         e = exp[0].eval(f)
-        self.assertEqual(f.symbols.keys(), ['plus'])
+        self.assertEqual(list(f.symbols.keys()), ['plus'])
         e = exp[1].eval(f)
         self.assertEqual(set(f.symbols.keys()), set(['plus', 'b']))
         self.assertEqual(list(f.read('(b 3)', t))[0].eval(f), Number.make(6))

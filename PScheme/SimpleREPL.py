@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # 
 # Copyright 2011 PScheme Contributors (see CONTIBUTORS for details). All rights reserved.
 # 
@@ -28,12 +28,25 @@
 
 import PScheme
 import os
+import sys
 
-def input():
+# Note: readline library is released under a GPL license.
+# Any derived work has to either comply with terms of the GPL license or must remove
+# the following import statement.
+try:
+    import readline
+except ImportError:
+    pass
+
+def readInput():
     try:
         while True:
-            yield raw_input('> ')
-    except KeyboardInterrupt:
+            if sys.version_info[0] == 2:
+                yield str(raw_input('> '))
+            else:
+                yield str(input('> '))
+    except (EOFError, KeyboardInterrupt):
+        print('')
         return
         
 def flush(generator):
@@ -42,7 +55,7 @@ def flush(generator):
 def output(results):
     for result in results:
         if not isinstance(result, PScheme.Nil):
-            print result
+            print(result)
             
 def repl():
     frame = PScheme.Frame()
@@ -50,14 +63,20 @@ def repl():
     tokenizer = PScheme.Tokenizer(fname)
     with open(fname, 'r') as f:
         tokens = tokenizer.tokenizeLines(f)
+        #for t in tokens:
+        #    print(t)
+        #    break
         expressions = frame.parseTokens(tokens)
         results = PScheme.eval(expressions, frame) #result generator
         flush(results) # check results to force delayed execution
             
         
     tokenizer = PScheme.Tokenizer('console')
-    lines = input() #line generator
+    lines = readInput() #line generator
     tokens = tokenizer.tokenizeLines(lines) #token generator
+    #for t in tokens:
+    #    print(t)
+    #    break
     expressions = frame.parseTokens(tokens) #expression generator
     results = PScheme.eval(expressions, frame) #result generator
     output(results) #print out results

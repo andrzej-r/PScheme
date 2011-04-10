@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # 
 # Copyright 2011 PScheme Contributors (see CONTRIBUTORS for details). All rights reserved.
 # 
@@ -54,10 +54,10 @@ class ExpressionError(Exception):
         self.expr = expr
         self.msg = msg
         
-    def __str__(self):
-        return unicode(self)
+    #def __str__(self):
+    #    return unicode(self)
         
-    def __unicode__(self):
+    def __str__(self):
         if not 'meta' in self.expr.__dict__:
             return 'Error: ' + self.msg
         fileName = self.expr.meta['fileName']
@@ -86,19 +86,19 @@ class Token(object):
         return '<Token ' + str(self) + '>'
         
 class Tokenizer(object):
-    comment = ur'(?:;.*$)'
-    lparen = ur'(?:\()'
-    rparen = ur'(?:\))'
-    number = ur'(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)'
-    symbol = ur'(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~\d+-.@]*)|\+|\-|\.\.\.)'
-    string = ur'(?:\"(?:\\"|[^"])*?\")'
-    brokenstring = ur'(?:\"(?:\\"|[^"])*$)'
-    char = ur'(?:#\\\S\w*)'
-    boolean = ur'(?:#(?:t|f))'
-    quote = ur'(?:\')'
-    other = ur'(?:\S+)'
+    comment = r'(?:;.*$)'
+    lparen = r'(?:\()'
+    rparen = r'(?:\))'
+    number = r'(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)'
+    symbol = r'(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~\d+-.@]*)|\+|\-|\.\.\.)'
+    string = r'(?:\"(?:\\"|[^"])*?\")'
+    brokenstring = r'(?:\"(?:\\"|[^"])*$)'
+    char = r'(?:#\\\S\w*)'
+    boolean = r'(?:#(?:t|f))'
+    quote = r'(?:\')'
+    other = r'(?:\S+)'
     
-    tokens = comment + u'|' + lparen + u'|' + rparen + u'|' + number + u'|' + symbol + u'|' + string + u'|' + brokenstring + u'|' + char + u'|' + boolean + u'|' + quote + u'|' + other
+    tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote + '|' + other
     
     ptokens = re.compile(tokens, flags)
     #ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
@@ -116,8 +116,8 @@ class Tokenizer(object):
         """
         #print line
         self.lineNo += 1
-        for token_match in self.ptokens.finditer(line.decode('utf8')):
-            if not token_match.group().startswith(u';'):
+        for token_match in self.ptokens.finditer(line): #.decode('utf8')):
+            if not token_match.group().startswith(';'):
                 meta = {}
                 meta['fileName'] = self.fileName
                 meta['line'] = token_match.string
@@ -150,7 +150,7 @@ class Tokenizer(object):
             #print line
             self.lineNo += 1
             for token_match in self.ptokens.finditer(line):
-                if not token_match.group().startswith(u';'):
+                if not token_match.group().startswith(';'):
                     token = Token()
                     token.text = token_match.group()
                     token.meta = {}
@@ -206,7 +206,7 @@ class SExpression(object):
     @classmethod
     def parseTokens(cls, token, tokens, topLevel=False):
         text = token.text
-        if text == u'(':
+        if text == '(':
             expr = Pair.parseTokens(token, tokens, topLevel=topLevel)
         elif SExpression.pnumber.match(text):
             expr = Number.parseToken(token)
@@ -218,9 +218,9 @@ class SExpression(object):
             expr = Char.parseToken(token)
         elif SExpression.pboolean.match(text):
             expr = Boolean.parseToken(token)
-        elif text == u'\'':
+        elif text == '\'':
             try:
-                expr = Pair.makeFromList([SpecialSyntax.specialForms[u'quote'](), SExpression.parseTokens(tokens.next(), tokens, topLevel=topLevel)])
+                expr = Pair.makeFromList([SpecialSyntax.specialForms['quote'](), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
                 expr.meta = token.meta
             except StopIteration:
                 raise(ExpressionError(token, 'Nothing to quote.'))
@@ -325,7 +325,7 @@ class Nil(SelfEval):
         return other is self
 
 class Char(SelfEval):
-    pchar = re.compile(ur'^#\\(.+)$', flags)
+    pchar = re.compile(r'^#\\(.+)$', flags)
 
     cache = {}
     
@@ -351,9 +351,9 @@ class Char(SelfEval):
         
     def __str__(self):
         string = self.pchar.match(self.value).group(1)
-        if (string == u'newline'):
+        if (string == 'newline'):
             return "\n"
-        if (string == u'space'):
+        if (string == 'space'):
             return " "
         return string
         
@@ -366,21 +366,21 @@ class Char(SelfEval):
         
 class String(SelfEval):
     flags2 = flags #| re.M
-    pstring = re.compile(ur'^\"((?:[^"]|\")+)\"$', flags)
-    p1  = re.compile(ur'\\\\', flags2)
-    p2  = re.compile(ur'\\"', flags2)
-    p3  = re.compile(ur'\\a', flags2)
-    p4  = re.compile(ur'\\f', flags2)
-    p5  = re.compile(ur'\\n', flags2)
-    p6  = re.compile(ur'\\r', flags2)
-    p7  = re.compile(ur'\\t', flags2)
-    p8  = re.compile(ur'\\v', flags2)
-    p9  = re.compile(ur'\\b', flags2)
-    p10 = re.compile(ur'\\0', flags2)
-    #p11 = re.compile(ur'\\\n', flags2)
-    p30 = re.compile(ur'\\x([0-9a-fA-F]{2})', flags2)
-    p31 = re.compile(ur'\\u([0-9a-fA-F]{4})', flags2)
-    p32 = re.compile(ur'\\U([0-9a-fA-F]{6})', flags2)
+    pstring = re.compile(r'^\"((?:[^"]|\")+)\"$', flags)
+    p1  = re.compile(r'\\\\', flags2)
+    p2  = re.compile(r'\\"', flags2)
+    p3  = re.compile(r'\\a', flags2)
+    p4  = re.compile(r'\\f', flags2)
+    p5  = re.compile(r'\\n', flags2)
+    p6  = re.compile(r'\\r', flags2)
+    p7  = re.compile(r'\\t', flags2)
+    p8  = re.compile(r'\\v', flags2)
+    p9  = re.compile(r'\\b', flags2)
+    p10 = re.compile(r'\\0', flags2)
+    #p11 = re.compile(r'\\\n', flags2)
+    p30 = re.compile(r'\\x([0-9a-fA-F]{2})', flags2)
+    p31 = re.compile(r'\\u([0-9a-fA-F]{4})', flags2)
+    p32 = re.compile(r'\\U([0-9a-fA-F]{6})', flags2)
     
     @classmethod
     def make(cls, string):
@@ -398,21 +398,21 @@ class String(SelfEval):
     def isString(self):
         return True
         
-    def __str__(self):
-        return unicode(self)
+    #def __str__(self):
+    #    return unicode(self)
         
-    def __unicode__(self):
+    def __str__(self):
         s = self.value
-        s = self.p1.sub(ur'\\', s)
-        s = self.p2.sub(u'\"', s)
-        s = self.p3.sub(u'\a', s)
-        s = self.p4.sub(u'\f', s)
-        s = self.p5.sub(u'\n', s)
-        s = self.p6.sub(u'\r', s)
-        s = self.p7.sub(u'\t', s)
-        s = self.p8.sub(u'\v', s)
-        s = self.p9.sub(u'\b', s)
-        s = self.p10.sub(u'\0', s)
+        s = self.p1.sub(r'\\', s)
+        s = self.p2.sub('\"', s)
+        s = self.p3.sub('\a', s)
+        s = self.p4.sub('\f', s)
+        s = self.p5.sub('\n', s)
+        s = self.p6.sub('\r', s)
+        s = self.p7.sub('\t', s)
+        s = self.p8.sub('\v', s)
+        s = self.p9.sub('\b', s)
+        s = self.p10.sub('\0', s)
         s = self.p30.sub(lambda match: unichr(int(match.group(1), 16)), s)
         s = self.p31.sub(lambda match: unichr(int(match.group(1), 16)), s)
         s = self.p32.sub(lambda match: unichr(int(match.group(1), 16)), s)
@@ -428,7 +428,7 @@ class String(SelfEval):
 class Number(SelfEval):
     @classmethod
     def make(cls, value):
-        if isinstance(value, (long, int)):
+        if isinstance(value, int):
             return IntegerNumber.make(value)
         if isinstance(value, float):
             return RealNumber.make(value)
@@ -439,7 +439,7 @@ class Number(SelfEval):
         if (text.find('.') >= 0 or text.find('e') >= 0):
             return RealNumber.make(float(text), token.meta)
         else:
-            return IntegerNumber.make(long(text))
+            return IntegerNumber.make(int(text))
             #return IntegerNumber.makeUnCached(long(text), token.meta)
 
     def isNumber(self):
@@ -644,6 +644,9 @@ class Null(SExpression):
     def __nonzero__(self):
         return True
         
+    def __bool__(self):
+        return True
+        
     def __getitem__(self, index):
         raise IndexError('(null) index out of range')
 
@@ -654,7 +657,7 @@ class Null(SExpression):
         return '()'
         
     def __eq__(self, other):
-        return (other is self)# or (type(other) == type(self))
+        return (other is self) #or (type(other) == type(self))
 
 class Pair(SExpression):
     @classmethod
@@ -689,7 +692,7 @@ class Pair(SExpression):
             tail = self
             for t in tokens:
                 #print t.text
-                if t.text != u')':
+                if t.text != ')':
                     expr = SExpression.parseTokens(t, tokens)
                     tail.cdr = cls.make(expr, Null.make())
                     tail = tail.cdr
@@ -759,12 +762,12 @@ class Pair(SExpression):
             indices = index.indices(len(self))
             if indices[1] == length and indices[2] == 1: # reuses the tail
                 res = self
-                for i in xrange(0, indices[0]):
+                for i in range(0, indices[0]):
                     res = res.cdr
                 return res
             else:
                 return Pair.makeFromList([self[i] for i in range(*indices)]) # allocates new list
-        if not isinstance(index, (int, long)):
+        if not isinstance(index, int):
             raise TypeError('pair indices must be integers, not ' + index.__class__.__name__)
         if index < 0:
             index += length
@@ -820,20 +823,20 @@ class SpecialSyntax(SExpression):
     object = None
     
     specialForms = {
-        u'quote':        lambda: QuoteForm.make(),
-        u'define':       lambda: DefineForm.make(),
-        u'lambda':       lambda: LambdaForm.make(),
-        u'let':          lambda: LetForm.make(),
-        u'let*':         lambda: LetStarForm.make(),
-        u'letrec':       lambda: LetrecForm.make(),
-        u'set!':         lambda: SetForm.make(),
-        u'set-car!':     lambda: SetCarForm.make(),
-        u'set-cdr!':     lambda: SetCdrForm.make(),
-        u'if':           lambda: IfForm.make(),
-        u'cond':         lambda: CondForm.make(),
-        u'case':         lambda: CaseForm.make(),
-        u'and':          lambda: AndForm.make(),
-        u'or':           lambda: OrForm.make(),
+        'quote':        lambda: QuoteForm.make(),
+        'define':       lambda: DefineForm.make(),
+        'lambda':       lambda: LambdaForm.make(),
+        'let':          lambda: LetForm.make(),
+        'let*':         lambda: LetStarForm.make(),
+        'letrec':       lambda: LetrecForm.make(),
+        'set!':         lambda: SetForm.make(),
+        'set-car!':     lambda: SetCarForm.make(),
+        'set-cdr!':     lambda: SetCdrForm.make(),
+        'if':           lambda: IfForm.make(),
+        'cond':         lambda: CondForm.make(),
+        'case':         lambda: CaseForm.make(),
+        'and':          lambda: AndForm.make(),
+        'or':           lambda: OrForm.make(),
         
     }
 
@@ -922,27 +925,27 @@ class PrimitiveProcedure(Procedure):
     object = None
 
     primitiveFunctions = {
-        u'eq?':          lambda: EqProcedure.make(),
-        u'eqv?':         lambda: EqvProcedure.make(),
-        u'equal?':       lambda: EqualProcedure.make(),
-        u'=':            lambda: NumEqProcedure.make(),
-        u'<':            lambda: NumLTProcedure.make(),
-        u'<=':           lambda: NumLTEProcedure.make(),
-        u'>':            lambda: NumGTProcedure.make(),
-        u'>=':           lambda: NumGTEProcedure.make(),
-        u'cons':         lambda: ConsProcedure.make(),
-        u'car':          lambda: CarProcedure.make(),
-        u'cdr':          lambda: CdrProcedure.make(),
-        u'not':          lambda: NotProcedure.make(),
-        u'+':            lambda: SumProcedure.make(),
-        u'-':            lambda: SubtractProcedure.make(),
-        u'*':            lambda: MultiplyProcedure.make(),
-        u'/':            lambda: DivideProcedure.make(),
-        u'quotient':     lambda: QuotientProcedure.make(),
-        u'modulo':       lambda: ModuloProcedure.make(),
-        u'remainder':    lambda: RemainderProcedure.make(),
-        u'write-char':   lambda: WriteCharProcedure.make(),
-        u'display':      lambda: DisplayProcedure.make(),
+        'eq?':          lambda: EqProcedure.make(),
+        'eqv?':         lambda: EqvProcedure.make(),
+        'equal?':       lambda: EqualProcedure.make(),
+        '=':            lambda: NumEqProcedure.make(),
+        '<':            lambda: NumLTProcedure.make(),
+        '<=':           lambda: NumLTEProcedure.make(),
+        '>':            lambda: NumGTProcedure.make(),
+        '>=':           lambda: NumGTEProcedure.make(),
+        'cons':         lambda: ConsProcedure.make(),
+        'car':          lambda: CarProcedure.make(),
+        'cdr':          lambda: CdrProcedure.make(),
+        'not':          lambda: NotProcedure.make(),
+        '+':            lambda: SumProcedure.make(),
+        '-':            lambda: SubtractProcedure.make(),
+        '*':            lambda: MultiplyProcedure.make(),
+        '/':            lambda: DivideProcedure.make(),
+        'quotient':     lambda: QuotientProcedure.make(),
+        'modulo':       lambda: ModuloProcedure.make(),
+        'remainder':    lambda: RemainderProcedure.make(),
+        'write-char':   lambda: WriteCharProcedure.make(),
+        'display':      lambda: DisplayProcedure.make(),
     }
 
     @classmethod
@@ -1227,7 +1230,7 @@ class DisplayProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise ExpressionError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
-        sys.stdout.write(unicode(operands.car))
+        sys.stdout.write(str(operands.car))
         return Nil.make()
 
 class CompoundProcedure(Procedure):
@@ -1287,11 +1290,11 @@ def readLine(line, frame):
         try: 
             result = expression.eval(frame)
             if not isinstance(result, Nil):
-                yield unicode(result)
+                yield str(result)
         except ExpressionError as e:
-            yield unicode(e)
+            yield str(e)
         except RuntimeError:
-            yield u'Maximum stack depth exceeded'
+            yield 'Maximum stack depth exceeded'
         
 def eval(expressions, frame):
     for expression in expressions:
@@ -1299,8 +1302,8 @@ def eval(expressions, frame):
         try: 
             result = expression.eval(frame)
             if not isinstance(result, Nil):
-                yield unicode(result)
+                yield str(result)
         except ExpressionError as e:
-            yield unicode(e)
+            yield str(e)
         except RuntimeError:
-            yield u'Maximum stack depth exceeded'
+            yield 'Maximum stack depth exceeded'

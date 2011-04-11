@@ -63,9 +63,6 @@ def repl():
     tokenizer = PScheme.Tokenizer(fname)
     with open(fname, 'r') as f:
         tokens = tokenizer.tokenizeLines(f)
-        #for t in tokens:
-        #    print(t)
-        #    break
         expressions = frame.parseTokens(tokens)
         results = PScheme.eval(expressions, frame) #result generator
         flush(results) # check results to force delayed execution
@@ -74,9 +71,6 @@ def repl():
     tokenizer = PScheme.Tokenizer('console')
     lines = readInput() #line generator
     tokens = tokenizer.tokenizeLines(lines) #token generator
-    #for t in tokens:
-    #    print(t)
-    #    break
     expressions = frame.parseTokens(tokens) #expression generator
     results = PScheme.eval(expressions, frame) #result generator
     output(results) #print out results

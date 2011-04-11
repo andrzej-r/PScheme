@@ -56,29 +56,31 @@ class PSchemeTest(unittest.TestCase):
     def test_030_evalDefineAndLookup(self):
         f = Frame()
         t = Tokenizer('tests')
-        e = list(f.read('(define a 1)', t))[0].eval(f)
+        #e = list(f.read('(define a 1)', t))[0].eval(f)
+        e = list(f.read('(define a 1)', t))[0].eval(f, None).eval(f, None)
+        #e = list(eval(f.read('(define a 1)', t), f)) #[0]
         self.assertEqual(e, Nil.make())
         self.assertEqual(f.symbols, {'a': Number.make(1)})
-        self.assertEqual(list(f.read('a', t))[0].eval(f), Number.make(1))
+        self.assertEqual(list(f.read('a', t))[0].eval(f, None).eval(f, None), Number.make(1))
 
     def test_031_evalDefineAndLookup(self):
         f = Frame()
         t = Tokenizer('tests')
-        e = list(f.read('(define (b a) (+ a a))', t))[0].eval(f)
+        e = list(f.read('(define (b a) (+ a a))', t))[0].eval(f, None).eval(f, None)
         self.assertEqual(e, Nil.make())
         self.assertTrue(isinstance(f.symbols['b'], CompoundProcedure))
-        self.assertTrue(isinstance(list(f.read('b', t))[0].eval(f), CompoundProcedure))
-        self.assertRaises(ExpressionError, lambda: list(f.read('a', t))[0].eval(f))
+        self.assertTrue(isinstance(list(f.read('b', t))[0].eval(f, None), CompoundProcedure))
+        self.assertRaises(ExpressionError, lambda: list(f.read('a', t))[0].eval(f, None).eval(f, None))
 
-        self.assertEqual(list(f.read('(b 3)', t))[0].eval(f), Number.make(6))
+        self.assertEqual(list(f.read('(b 3)', t))[0].eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None), Number.make(6))
 
     def test_032_evalDefineAndLookup(self):
         f = Frame()
         t = Tokenizer('tests')
         exp = list(f.read('(define plus +)(define (b a) (plus a a))', t))
-        e = exp[0].eval(f)
+        e = exp[0].eval(f, None).eval(f, None)
         self.assertEqual(list(f.symbols.keys()), ['plus'])
-        e = exp[1].eval(f)
+        e = exp[1].eval(f, None)
         self.assertEqual(set(f.symbols.keys()), set(['plus', 'b']))
-        self.assertEqual(list(f.read('(b 3)', t))[0].eval(f), Number.make(6))
+        self.assertEqual(list(f.read('(b 3)', t))[0].eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None).eval(f, None), Number.make(6))
         

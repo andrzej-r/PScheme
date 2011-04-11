@@ -143,24 +143,6 @@ class Tokenizer(object):
         return self.chain(self.tokenizeLine(line) for line in lines)
         #return self.chain([self.tokenizeLine(line) for line in lines])
                 
-    @classmethod
-    def fromText(cls, text):
-        self = cls()
-        for line in text.splitlines():
-            #print line
-            self.lineNo += 1
-            for token_match in self.ptokens.finditer(line):
-                if not token_match.group().startswith(';'):
-                    token = Token()
-                    token.text = token_match.group()
-                    token.meta = {}
-                    token.meta['line'] = token_match.string
-                    token.meta['lineNo'] = self.lineNo
-                    token.meta['colStart'] = token_match.start()+1
-                    token.meta['colEnd'] = token_match.end()+1
-                    #print token.text
-                    yield token
-
 class Frame(object):
     def __init__(self, parentFrame=None):
         self.parentFrame = parentFrame
@@ -233,7 +215,7 @@ class SExpression(object):
             raise(ExpressionError(token, 'Unrecognized token "' + text + '"'))
         return expr
             
-    def eval(self, frame):
+    def eval(self, frame, cont):
         raise ExpressionError(self, 'Abstract SExpression should not be evaluated directly')
     
     def __ne__(self, other):
@@ -295,10 +277,14 @@ class SExpression(object):
         
     def isSpecialSyntax(self):
         return False
+
+    def isTrampolined(self):
+        return False
     
 class SelfEval(SExpression):
-    def eval(self, frame):
-        return self
+    def eval(self, frame, cont):
+        return Trampolined.make(cont, self)
+        #return self
         
     def isSelfEval(self):
         return True
@@ -576,8 +562,9 @@ class Symbol(SExpression):
         #sym = Symbol.makeUnCached(token.text, token.meta)
         return sym
         
-    def eval(self, frame):
-        return frame.resolveSymbol(self)
+    def eval(self, frame, cont):
+        return Trampolined.make(cont, frame.resolveSymbol(self))
+        #return frame.resolveSymbol(self)
 
     def isSymbol(self):
         return True
@@ -600,11 +587,12 @@ class Error(SExpression):
         self.exception = exception
         return self
     
-    def eval(self, frame):
-        raise self.exception
+    def eval(self, frame, cont):
+        return Trampolined.make(cont, self)
+        #raise self.exception
 
     def __str__(self):
-        return '<ErrorExpr ' + str(self.exception) + '>'
+        return str(self.exception)
 
 class Null(SExpression):
     cache = None
@@ -623,11 +611,11 @@ class Null(SExpression):
     #    self.meta = meta
     #    return self
     
-    def eval(self, frame):
+    def eval(self, frame, cont):
         raise ExpressionError(self, 'Empty application.')
 
-    def evalElements(self, frame):
-        return self
+    def evalElements(self, frame, cont, excp=None):
+        return Trampolined.make(cont, self)
         
     def toList(self):
         return []
@@ -714,27 +702,37 @@ class Pair(SExpression):
             return lst
         return lst + [cdr]
         
-    def eval(self, frame):
+    def eval(self, frame, cont):
         if self.car.isSpecialSyntax():
-            return self.car.apply(self.cdr, self, frame)
-        args = self.cdr.evalElements(frame)
-        op = self.car.eval(frame)
-        if op.isProcedure():
-            return op.apply(args, self)
-        raise ExpressionError(self, 'procedure application, first operand is not a procedure.' + str(operator))
+            return self.car.apply(self.cdr, self, frame, cont)
+        def step2(operator):
+            def step3(operands):
+                return operator.apply(operands, self, cont)
+            if not operator.isProcedure():
+                raise ExpressionError(self, 'procedure application, first operand is not a procedure.')
+            return self.cdr.evalElements(frame, step3, ExpressionError(self, '"eval": improper operand list'))
+        return self.car.eval(frame, step2)
 
-    def evalElements(self, frame):
-        res = self.make(self.car.eval(frame), Null.make())
-        cdr = res
-        sCdr = self.cdr
-        while sCdr.isPair():
-            cdr.cdr = self.make(sCdr.car.eval(frame), Null.make())
-            cdr = cdr.cdr
-            sCdr = sCdr.cdr
-        if not sCdr.isNull():
-            raise ExpressionError(self, '"eval": improper operand list.')
-            #cdr = sCdr.eval(frame)
-        return res
+    def evalElements(self, frame, cont, excp=None):
+        def step2(car):
+            def step3(cdr):
+                return Trampolined.make(cont, Pair.make(car, cdr))
+            if self.cdr.isPair() or self.cdr.isNull():
+                return self.cdr.evalElements(frame, step3, excp)
+            else:
+                if excp:
+                    raise excp
+                else:
+                    return self.cdr.eval(frame, step3)
+        return self.car.eval(frame, step2)
+
+    def evalSequence(self, frame, cont):
+        def step2(car):
+            return self.cdr.evalSequence(frame, cont)
+        if self.cdr.isNull():
+            return self.car.eval(frame, cont)
+        else:
+            return self.car.eval(frame, step2)
         
     def isPair(self):
         return True
@@ -819,6 +817,70 @@ class Pair(SExpression):
             sCdr = sCdr.cdr
             oCdr = oCdr.cdr
 
+class Procedure(SExpression):
+    def apply(self, operands, callingForm, cont = None):
+        pass
+        
+    def isProcedure(self):
+        return True
+
+    def eval(self, frame, cont):
+        raise ExpressionError(self, 'Procedure should not be evaluated directly')
+    
+class CompoundProcedure(Procedure):
+    @classmethod
+    def make(cls, formals, body, frame, meta):
+        self = cls()
+        self.formals = formals
+        self.body = body
+        #self.body = Body.make(body, meta)
+        self.frame = frame
+        self.checkFormals()
+        self.meta = meta
+        return self
+
+    def checkFormals(self):
+        for f in self.formals:
+            if not f.isSymbol():
+                raise ExpressionError(f, 'Invalid procedure operand name')
+        
+    def bind(self, operands, callingForm):
+        if len(self.formals) != len(operands):
+            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + ', provided ' + str(len(operands)) + '.')
+        newFrame = Frame(self.frame)
+        for t in zip(self.formals, operands):
+            newFrame.addSymbol(t[0], t[1])
+        return newFrame
+        
+    def apply(self, operands, callingForm, cont = None):
+        newFrame = self.bind(operands, callingForm)
+        return self.body.evalSequence(newFrame, cont)
+        #return self.body.eval(newFrame, cont)
+    
+    def __str__(self):
+        formals = ''
+        if len(self.formals) > 0:
+            formals = self.formals[0].name
+            for f in self.formals[1:]:
+                formals.append(' ' + f.name)
+        return '#<procedure ('+ formals + ')>'
+
+class Trampolined(SExpression):
+    @classmethod
+    def make(cls, continuation, operand):
+        if continuation == None:
+            return operand
+        self = cls()
+        self.continuation = continuation
+        self.operand = operand
+        return self
+
+    def isTrampolined(self):
+        return True
+
+    def eval(self, frame, cont):
+        return self.continuation(self.operand)
+
 class SpecialSyntax(SExpression):
     object = None
     
@@ -846,10 +908,10 @@ class SpecialSyntax(SExpression):
             cls.object = cls()
         return cls.object
             
-    def eval(self, frame):
+    def eval(self, frame, cont):
         raise ExpressionError(self, 'Special syntax should not be evaluated directly')
     
-    def apply(self, operands, callingForm, frame):
+    def apply(self, operands, callingForm, frame, cont = None):
         pass
 
     def isSpecialSyntax(self):
@@ -859,15 +921,14 @@ class SpecialSyntax(SExpression):
         return '#<' + self.__class__.__name__ + '>'
     
 class QuoteForm(SpecialSyntax):
-    def apply(self, operands, callingForm, frame):
+    def apply(self, operands, callingForm, frame, cont = None):
         if operands.isNull() or operands.cdr.isPair():
             raise ExpressionError(callingForm, '"quote" requires 1 operand, ' + str(len(operands)) + ' given.')
         res = operands.car
-        return res
-
+        return Trampolined.make(cont, res)
 
 class DefineForm(SpecialSyntax):
-    def apply(self, operands, callingForm, frame):
+    def apply(self, operands, callingForm, frame, cont):
         #if not self.topLevel: # and not self.inBody:
         #    raise ExpressionError(self, '"define" only allowed at the top level or in a body of a procedure')
         if operands.isNull() or operands.cdr.isNull():
@@ -876,8 +937,10 @@ class DefineForm(SpecialSyntax):
         if not firstArg.isSymbol() and not firstArg.isPair():
             raise ExpressionError(callingForm, '"define": Invalid type of the first operand')
         if firstArg.isSymbol():
-            frame.addSymbol(firstArg, operands.cdr.car.eval(frame))
-            return Nil.make()
+            def step2(value):
+                frame.addSymbol(firstArg, value)
+                return Trampolined.make(cont, Nil.make())
+            return operands.cdr.car.eval(frame, step2)
         if firstArg.isPair():
             if not firstArg.car.isSymbol():
                 raise ExpressionError(callingForm, 'Invalid procedure name in "define"')
@@ -886,40 +949,31 @@ class DefineForm(SpecialSyntax):
             body = operands.cdr
             procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
             frame.addSymbol(procName, procedure)
-            return Nil.make()
+            return Trampolined.make(cont, Nil.make())
 
 class CondForm(SpecialSyntax):
-    def apply(self, operands, callingForm, frame):
+    def apply(self, operands, callingForm, frame, cont):
         pass
 
 class IfForm(SpecialSyntax):
-    def apply(self, operands, callingForm, frame):
+    def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull() or (operands.cdr.cdr.isPair() and operands.cdr.cdr.cdr.isPair()):
             raise ExpressionError(callingForm, '"if" requires 2 or 3 operands, ' + str(len(operands)) + ' given.')
-        firstArg = operands.car.eval(frame)
-        if not firstArg.isBoolean() or firstArg.value: #True
-            res = operands.cdr.car.eval(frame)
-        elif operands.cdr.cdr.isPair():
-            res = operands.cdr.cdr.car.eval(frame)
-        else:
-            res = Nil.make()
-        return res
+        def step2(predicate):
+            if not predicate.isBoolean() or predicate.value: #True
+                res = operands.cdr.car.eval(frame, cont)
+            elif operands.cdr.cdr.isPair():
+                res = operands.cdr.cdr.car.eval(frame, cont)
+            else:
+                res = Trampolined.make(cont, Nil.make())
+            return res
+        return operands.car.eval(frame, step2)
 
 class AndForm(SpecialSyntax):
     pass
     
 class OrForm(SpecialSyntax):
     pass
-    
-class Procedure(SExpression):
-    def apply(self, operands, callingForm):
-        pass
-        
-    def isProcedure(self):
-        return True
-
-    def eval(self, frame):
-        raise ExpressionError(self, 'Procedure should not be evaluated directly')
     
 class PrimitiveProcedure(Procedure):
     object = None
@@ -958,37 +1012,37 @@ class PrimitiveProcedure(Procedure):
         return '#<' + self.__class__.__name__ + '>'
     
 class ConsProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise ExpressionError(callingForm, '"cons" requires 2 operands, provided ' + str(len(operands)) + '.')
         expr1 = operands.car
         expr2 = operands.cdr.car
         res = Pair.make(expr1, expr2)
         #res.meta = callingForm.meta
-        return res
+        return Trampolined.make(cont, res)
 
 class CarProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise ExpressionError(callingForm, '"car" requires 1 operand, provided ' + str(len(operands)) + '.')
         arg = operands.car
         if not arg.isPair():
             raise ExpressionError(callingForm, '"car" operand must be a pair.')
         res = arg.car
-        return res
+        return Trampolined.make(cont, res)
 
 class CdrProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise ExpressionError(callingForm, '"cdr" requires 1 operand, provided ' + str(len(operands)) + '.')
         arg = operands.car
         if not arg.isPair():
             raise ExpressionError(callingForm, '"cdr" operand must be a pair.')
         res = arg.cdr
-        return res
+        return Trampolined.make(cont, res)
             
 class NotProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise ExpressionError(callingForm, '"not" requires 1 operand, provided ' + str(len(operands)) + '.')
         arg = operands.car
@@ -996,10 +1050,10 @@ class NotProcedure(PrimitiveProcedure):
         if arg.isBoolean():
             value = not(arg.value)
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
 
 class EqProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '"eq?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1014,10 +1068,10 @@ class EqProcedure(PrimitiveProcedure):
                 value = False
             cdr = cdr.cdr
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class EqvProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '"eqv?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1037,10 +1091,10 @@ class EqvProcedure(PrimitiveProcedure):
                 value = False
             cdr = cdr.cdr
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class EqualProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '"equal?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1051,10 +1105,10 @@ class EqualProcedure(PrimitiveProcedure):
                 value = False
             cdr = cdr.cdr
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class NumEqProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '"=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1070,10 +1124,10 @@ class NumEqProcedure(PrimitiveProcedure):
                 value = False
             cdr = cdr.cdr
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class NumLTProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '"<" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1090,10 +1144,10 @@ class NumLTProcedure(PrimitiveProcedure):
             cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class NumLTEProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '"<=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1110,10 +1164,10 @@ class NumLTEProcedure(PrimitiveProcedure):
             cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class NumGTProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '">" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1130,10 +1184,10 @@ class NumGTProcedure(PrimitiveProcedure):
             cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class NumGTEProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise ExpressionError(callingForm, '">=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
@@ -1150,20 +1204,20 @@ class NumGTEProcedure(PrimitiveProcedure):
             cdr = cdr.cdr
             previous = n
         res = Boolean.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class SumProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         value = 0
         for n in operands:
             if not n.isNumber():
                 raise ExpressionError(callingForm, 'operand is not a Number')
             value += n.value
         res = Number.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class SubtractProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull():
             raise ExpressionError(callingForm, '"-" requires at least 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
@@ -1177,20 +1231,20 @@ class SubtractProcedure(PrimitiveProcedure):
                     raise ExpressionError(callingForm, 'operand is not a Number')
                 value -= n.value
             res = Number.make(value)
-        return res
+        return Trampolined.make(cont, res)
 
 class MultiplyProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         value = 1
         for n in operands:
             if not n.isNumber():
                 raise ExpressionError(callingForm, 'operand is not a Number')
             value *= n.value
         res = Number.make(value)
-        return res
+        return Trampolined.make(cont, res)
         
 class DivideProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull():
             raise ExpressionError(callingForm, '"/" requires at least 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
@@ -1202,105 +1256,48 @@ class DivideProcedure(PrimitiveProcedure):
             for n in operands.cdr:
                 if not n.isNumber():
                     raise ExpressionError(callingForm, 'operand is not a Number')
+                if n.value == 0:
+                    raise ExpressionError(callingForm, 'division by 0')
                 value /= n.value
             res = Number.make(value)
-        return res
+        return Trampolined.make(cont, res)
 
 class ModuloProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise ExpressionError(callingForm, '"modulo" requires 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
             raise ExpressionError(callingForm, 'operand is not a Number')
         if not operands.cdr.car.isNumber():
             raise ExpressionError(callingForm, 'operand is not a Number')
+        if operands.cdr.car.value == 0:
+            raise ExpressionError(callingForm, 'division by 0')
         res = Number.make(operands.car.value % operands.cdr.car.value)
-        return res
+        return Trampolined.make(cont, res)
 
 class WriteCharProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise ExpressionError(callingForm, '"write-char" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isChar():
             raise ExpressionError(callingForm, 'operand is not a Character')
         sys.stdout.write(str(operands.car))
-        return Nil.make()
+        return Trampolined(cont, Nil.make())
 
 class DisplayProcedure(PrimitiveProcedure):
-    def apply(self, operands, callingForm):
+    def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise ExpressionError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
         sys.stdout.write(str(operands.car))
-        return Nil.make()
+        return Trampolined(cont, Nil.make())
 
-class CompoundProcedure(Procedure):
-    @classmethod
-    def make(cls, formals, body, frame, meta):
-        self = cls()
-        self.formals = formals
-        self.body = Body.make(body, meta)
-        self.frame = frame
-        self.checkFormals()
-        self.meta = meta
-        return self
-
-    def checkFormals(self):
-        for f in self.formals:
-            if not f.isSymbol():
-                raise ExpressionError(f, 'Invalid procedure operand name')
-        
-    def bind(self, operands, callingForm):
-        if len(self.formals) != len(operands):
-            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + ', provided ' + str(len(operands)) + '.')
-        newFrame = Frame(self.frame)
-        for t in zip(self.formals, operands):
-            newFrame.addSymbol(t[0], t[1])
-        return newFrame
-        
-    def apply(self, operands, callingForm):
-        newFrame = self.bind(operands, callingForm)
-        return self.body.eval(newFrame)
-    
-    def __str__(self):
-        formals = ''
-        if len(self.formals) > 0:
-            formals = self.formals[0].name
-            for f in self.formals[1:]:
-                formals.append(' ' + f.name)
-        return '#<procedure ('+ formals + ')>'
-        
-class Body():
-    @classmethod
-    def make(cls, body, meta):
-        self = cls()
-        self.body = body
-        self.meta = meta
-        self.definesAllowed = True
-        return self
-
-    def eval(self, frame):
-        last = Nil.make()
-        for expr in self.body:
-            last = expr.eval(frame)
-        return last
-
-def readLine(line, frame):
-    for expression in expressions:
-        #print expression
-        try: 
-            result = expression.eval(frame)
-            if not isinstance(result, Nil):
-                yield str(result)
-        except ExpressionError as e:
-            yield str(e)
-        except RuntimeError:
-            yield 'Maximum stack depth exceeded'
-        
 def eval(expressions, frame):
     for expression in expressions:
         #print expression
         try: 
-            result = expression.eval(frame)
+            result = expression.eval(frame, None)
+            while result.isTrampolined():
+                result = result.eval(frame, None)
             if not isinstance(result, Nil):
                 yield str(result)
         except ExpressionError as e:

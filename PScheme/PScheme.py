@@ -177,6 +177,23 @@ class Frame(object):
     def addSymbol(self, symbol, value):
         self.symbols[symbol.name] = value
         
+    def evaluateExpressions(self, expressions):
+        for expression in expressions:
+            #print expression
+            try:
+                def processResult(result):
+                    return result
+                result = expression.eval(self, processResult)
+                while result.isTrampolined():
+                    #print(result.operand)
+                    #print(result)
+                    result = result.eval(self, processResult)
+                yield result
+            except ExpressionError as e:
+                yield Error.make(e)
+            except RuntimeError:
+                yield Error.make('Error: maximum stack depth exceeded')
+
 class SExpression(object):
     pnumber = re.compile(r'^' + Tokenizer.number + r'$', flags)
     pstring = re.compile(r'^' + Tokenizer.string + r'$', flags)
@@ -221,6 +238,9 @@ class SExpression(object):
     def __ne__(self, other):
         return not (self == other)
         
+    def __str__(self):
+        return '#<unknown-expression>'
+
     def __repr__(self):
         return str(self)
         
@@ -270,6 +290,9 @@ class SExpression(object):
         return False
         
     def isProcedure(self):
+        return False
+        
+    def isContinuation(self):
         return False
         
     def isList(self):
@@ -827,6 +850,24 @@ class Procedure(SExpression):
     def eval(self, frame, cont):
         raise ExpressionError(self, 'Procedure should not be evaluated directly')
     
+class Continuation(Procedure):
+    @classmethod
+    def make(cls, continuation):
+        self = cls()
+        self.continuation = continuation
+        return self
+        
+    def isContinuation(self):
+        return True
+        
+    def apply(self, operands, callingForm, cont = None):
+        if len(operands) != 1:
+            raise ExpressionError(callingForm, 'Wrong number of operands, required 1, provided ' + str(len(operands)) + '.')
+        return Trampolined(operands.car)
+    
+    def __str__(self):
+        return '#<continuation>'
+
 class CompoundProcedure(Procedure):
     @classmethod
     def make(cls, formals, body, frame, meta):
@@ -868,8 +909,8 @@ class CompoundProcedure(Procedure):
 class Trampolined(SExpression):
     @classmethod
     def make(cls, continuation, operand):
-        if continuation == None:
-            return operand
+        #if continuation == None:
+        #    return operand
         self = cls()
         self.continuation = continuation
         self.operand = operand
@@ -880,6 +921,9 @@ class Trampolined(SExpression):
 
     def eval(self, frame, cont):
         return self.continuation(self.operand)
+
+    def __str__(self):
+        return '#<trampolined value>'
 
 class SpecialSyntax(SExpression):
     object = None
@@ -1000,6 +1044,8 @@ class PrimitiveProcedure(Procedure):
         'remainder':    lambda: RemainderProcedure.make(),
         'write-char':   lambda: WriteCharProcedure.make(),
         'display':      lambda: DisplayProcedure.make(),
+        'call-with-current-continuation': lambda: CallCCProcedure.make(),
+        'call/cc':      lambda: CallCCProcedure.make(),
     }
 
     @classmethod
@@ -1282,25 +1328,20 @@ class WriteCharProcedure(PrimitiveProcedure):
         if not operands.car.isChar():
             raise ExpressionError(callingForm, 'operand is not a Character')
         sys.stdout.write(str(operands.car))
-        return Trampolined(cont, Nil.make())
+        return Trampolined.make(cont, Nil.make())
 
 class DisplayProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise ExpressionError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
         sys.stdout.write(str(operands.car))
-        return Trampolined(cont, Nil.make())
+        return Trampolined.make(cont, Nil.make())
 
-def eval(expressions, frame):
-    for expression in expressions:
-        #print expression
-        try: 
-            result = expression.eval(frame, None)
-            while result.isTrampolined():
-                result = result.eval(frame, None)
-            if not isinstance(result, Nil):
-                yield str(result)
-        except ExpressionError as e:
-            yield str(e)
-        except RuntimeError:
-            yield 'Maximum stack depth exceeded'
+class CallCCProcedure(PrimitiveProcedure):
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"call/cc" requires 1 operand, provided ' + str(len(operands)) + '.')
+        if not operands.car.isProcedure():
+            raise ExpressionError(callingForm, '"call/cc" operand must be a procedure.')
+        continuation = Continuation.make(cont)
+        return operands.car.apply(Pair.makeFromList([continuation]), callingForm, cont)

@@ -64,7 +64,7 @@ def repl():
     with open(fname, 'r') as f:
         tokens = tokenizer.tokenizeLines(f)
         expressions = frame.parseTokens(tokens)
-        results = PScheme.eval(expressions, frame) #result generator
+        results = frame.evaluateExpressions(expressions) #result generator
         flush(results) # check results to force delayed execution
             
         
@@ -72,7 +72,7 @@ def repl():
     lines = readInput() #line generator
     tokens = tokenizer.tokenizeLines(lines) #token generator
     expressions = frame.parseTokens(tokens) #expression generator
-    results = PScheme.eval(expressions, frame) #result generator
+    results = frame.evaluateExpressions(expressions) #result generator
     output(results) #print out results
         
 if __name__ == "__main__":

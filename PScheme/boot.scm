@@ -85,3 +85,14 @@
 ;                ( (m n) (o p) (q r) )
 ;                ( (s t) (u v) (w x) )
 ;                ) )
+
+(define (odd n)
+    (if (= n 0)
+        #f
+        (even (- n 1))))
+(define (even n)
+    (if (= n 0)
+        #t
+        (odd (- n 1))))
+
+(define (identity x) x)

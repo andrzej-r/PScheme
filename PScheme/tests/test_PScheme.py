@@ -141,11 +141,32 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("(call-with-current-continuation identity)"), ['#<continuation>'])
         
         
+    def test_procedures(self):
+        "from R5RS 4.1.4"
+        self.assertTrue(isinstance(self.tpe("(lambda (x) (+ x x))")[0], CompoundProcedure))
+        self.assertEqual(self.tpe("((lambda (x) (+ x x)) 4)"), [Number.make(8)])
+        s = """
+      (define reverse-subtract
+        (lambda (x y) (- y x)))
+      (reverse-subtract 7 10)
+        """
+        self.assertEqual(self.tpe(s)[1], Number.make(3))
+        s = """
+      (define add4
+        (let ((x 4))
+          (lambda (y) (+ x y))))
+      (add4 6)        """
+        self.assertEqual(self.tpe(s)[1], Number.make(10))
+        
+        self.assertEqual(self.tpes("((lambda x x) 3 4 5 6)"), ["(3 4 5 6)"])
+        self.assertEqual(self.tpes("((lambda (x y . z) z) 3 4 5 6)"), ["(5 6)"])
+        
+        
     def test_bindings(self):
         "from R5RS 4.2.2"
         self.assertEqual(self.tpe("(let ((x 2) (y 3)) (* x y))"), [Number.make(6)])
         s = """
-    (let ((x 2) (y 3))
+      (let ((x 2) (y 3))
         (let ((x 7)
               (z (+ x y)))
           (* z x))) 
@@ -201,17 +222,15 @@ class PSchemeTest(unittest.TestCase):
         (lambda ()
           (let ((n 0))
             (lambda () (set! n (+ n 1)) 27))))
- 
-      
         """
         
-        #self.tpe(prog)
-        #self.assertEqual(self.tpes("(let ((g (gen-counter))) (eqv? g g))"), ['#t'])
-        #self.assertEqual(self.tpes("(eqv? (gen-counter) (gen-counter))"), ['#f'])
-        #self.assertEqual(self.tpes("(let ((g (gen-loser))) (eqv? g g))"), ['#t'])
-        #self.assertEqual(self.tpes("(eqv? (gen-loser) (gen-loser))"), ['#f'])  # unspecified
-        #self.assertEqual(self.tpes("(letrec ((f (lambda () (if (eqv? f g) 'both 'f))) (g (lambda () (if (eqv? f g) 'both 'g)))) (eqv? f g))"), ['#f'])  # unspecified
-        #self.assertEqual(self.tpes("(letrec ((f (lambda () (if (eqv? f g) 'f 'both))) (g (lambda () (if (eqv? f g) 'g 'both)))) (eqv? f g))"), ['#f'])
+        self.tpe(prog)
+        self.assertEqual(self.tpes("(let ((g (gen-counter))) (eqv? g g))"), ['#t'])
+        self.assertEqual(self.tpes("(eqv? (gen-counter) (gen-counter))"), ['#f'])
+        self.assertEqual(self.tpes("(let ((g (gen-loser))) (eqv? g g))"), ['#t'])
+        self.assertEqual(self.tpes("(eqv? (gen-loser) (gen-loser))"), ['#f'])  # unspecified
+        self.assertEqual(self.tpes("(letrec ((f (lambda () (if (eqv? f g) 'both 'f))) (g (lambda () (if (eqv? f g) 'both 'g)))) (eqv? f g))"), ['#f'])  # unspecified
+        self.assertEqual(self.tpes("(letrec ((f (lambda () (if (eqv? f g) 'f 'both))) (g (lambda () (if (eqv? f g) 'g 'both)))) (eqv? f g))"), ['#f'])
         
         self.assertEqual(self.tpes("(eqv? '(a) '(a))"), ['#f']) # unspecified
         self.assertEqual(self.tpes('(eqv? "a" "a")'), ['#f']) # unspecified

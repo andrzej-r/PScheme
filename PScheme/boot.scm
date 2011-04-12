@@ -96,3 +96,11 @@
         (odd (- n 1))))
 
 (define (identity x) x)
+(define (list . l)
+    (define (helper tail result)
+        (if (null? tail)
+            result
+            (helper (cdr tail) (cons (car tail) result))))
+    (helper l '()))
+    
+        

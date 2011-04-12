@@ -174,6 +174,14 @@ class Frame(object):
         else:
             raise ExpressionError(symbol, 'Undefined symbol "' + symbol.name + '"')
 
+    def resolveSymbolLocation(self, symbol):
+        if symbol.name in self.symbols:
+            return self.symbols
+        elif self.parentFrame:
+            return self.parentFrame.resolveSymbolLocation(symbol)
+        else:
+            return None
+        
     def addSymbol(self, symbol, value):
         self.symbols[symbol.name] = value
         
@@ -698,19 +706,43 @@ class Pair(SExpression):
     def parseTokens(cls, token, tokens, topLevel=False):
         try:
             #print token.text
+            improper = False
+            error = False
             self = cls.make(Null.make(), Null.make())
             tail = self
             for t in tokens:
                 #print t.text
-                if t.text != ')':
-                    expr = SExpression.parseTokens(t, tokens)
-                    tail.cdr = cls.make(expr, Null.make())
-                    tail = tail.cdr
-                else:
-                    self = self.cdr #discard empty car
-                    self.meta = token.meta
-                    self.topLevel = topLevel
-                    return self
+                if not improper: # proper list (so far)
+                    if t.text == '.':
+                        if tail == self: #first element
+                            error = True
+                        improper = True
+                    elif t.text == ')':
+                        self = self.cdr #discard empty car
+                        self.meta = token.meta
+                        self.topLevel = topLevel
+                        return self
+                    else:
+                        expr = SExpression.parseTokens(t, tokens)
+                        tail.cdr = cls.make(expr, Null.make())
+                        tail = tail.cdr
+                else: # improper
+                    if t.text == '.': # more than 1 dot
+                        error = True
+                    elif t.text == ')':
+                        if error or tail.isPair(): #earlier error or 0 tokens after the dot
+                            raise ExpressionError(token, 'Wrong improper list format.')
+                        self = self.cdr #discard empty car
+                        self.meta = token.meta
+                        self.topLevel = topLevel
+                        return self
+                    else:
+                        expr = SExpression.parseTokens(t, tokens)
+                        if not tail.isPair(): # more than 1 token after the dot
+                            error = True
+                        else:
+                            tail.cdr = expr
+                            tail = tail.cdr
         except StopIteration:
             raise ExpressionError(token, 'Unterminated list.')
         
@@ -880,11 +912,32 @@ class CompoundProcedure(Procedure):
         return self
 
     def checkFormals(self):
-        for f in self.formals:
-            if not f.isSymbol():
-                raise ExpressionError(f, 'Invalid procedure operand name')
+        defined = set()
+        pointer = self.formals
+        while pointer.isPair():
+            if not pointer.car.isSymbol():
+                raise ExpressionError(self, 'Invalid procedure operand name')
+            if pointer.car.name in defined:
+                raise ExpressionError(self, 'Duplicated operand name')
+            defined.add(pointer.car.name)
+            pointer = pointer.cdr
+        if not pointer.isSymbol() and not pointer.isNull():
+            raise ExpressionError(self, 'Invalid procedure operand name')
         
-    def bind(self, operands, callingForm):
+    def bind(self, formals, operands, callingForm, frame, cont):
+        if operands.isNull() and formals.isPair():
+            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
+        if operands.isNull() and formals.isNull():
+            return Trampolined.make(cont, frame)
+        if formals.isSymbol():
+            frame.addSymbol(formals, operands)
+            return Trampolined.make(cont, frame)
+        if operands.isPair() and formals.isPair() and formals.car.isSymbol():
+            frame.addSymbol(formals.car, operands.car)
+            return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
+        raise ExpressionError(callingForm, 'Wrong format of operands.')
+        
+    def bind_(self, operands, callingForm):
         if len(self.formals) != len(operands):
             raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + ', provided ' + str(len(operands)) + '.')
         newFrame = Frame(self.frame)
@@ -893,16 +946,12 @@ class CompoundProcedure(Procedure):
         return newFrame
         
     def apply(self, operands, callingForm, cont = None):
-        newFrame = self.bind(operands, callingForm)
-        return self.body.evalSequence(newFrame, cont)
+        def step2(newFrame):
+            return self.body.evalSequence(newFrame, cont)
+        return self.bind(self.formals, operands, callingForm, Frame(self.frame), step2)
     
     def __str__(self):
-        formals = ''
-        if len(self.formals) > 0:
-            formals = self.formals[0].name
-            for f in self.formals[1:]:
-                formals + ' ' + f.name
-        return '#<procedure ('+ formals + ')>'
+        return '#<procedure '+ str(self.formals) + '>'
 
 class Trampolined(SExpression):
     @classmethod
@@ -1090,9 +1139,20 @@ class LetrecForm(SpecialSyntax):
         binding = bindings.car
         return binding.cdr.car.eval(frame, step2)
 
-class CondForm(SpecialSyntax):
+class SetForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):
-        pass
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"set!" requires 2 operands, ' + str(len(operands)) + ' given.')
+        var = operands.car
+        if not var.isSymbol():
+            raise ExpressionError(callingForm, '"set!" first operand is not a symbol.')
+        targetFrame = frame.resolveSymbolLocation(var.name)
+        if targetFrame == None:
+            raise ExpressionError(callingForm, '"set!" undefined symbol' + var.name + '.')
+        def step2(value):
+            targetFrame[var.name] = value
+            return Trampolined.make(cont, Nil.make())
+        return operands.cdr.car.eval(frame, step2)
 
 class IfForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):
@@ -1107,6 +1167,10 @@ class IfForm(SpecialSyntax):
                 res = Trampolined.make(cont, Nil.make())
             return res
         return operands.car.eval(frame, step2)
+
+class CondForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont):
+        pass
 
 class AndForm(SpecialSyntax):
     pass

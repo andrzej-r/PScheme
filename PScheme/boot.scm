@@ -19,10 +19,10 @@
 (define (odd? x)
     (= (modulo x 2) 1))
 
-;(define (gcd m n)
-;    ( cond ( ( < m n ) ( gcd n m) )
-;        ( ( = (remainder m n ) 0) n)
-;           (#t (gcd n (remainder m n)))))
+(define (gcd m n)
+    ( cond ( ( < m n ) ( gcd n m) )
+        ( ( = (remainder m n ) 0) n)
+           (#t (gcd n (remainder m n)))))
 
 (define (caar l)   (car   (car l)))
 (define (cadr l)   (car   (cdr l)))

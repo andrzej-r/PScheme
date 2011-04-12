@@ -315,7 +315,7 @@ class SelfEval(SExpression):
     def __str__(self):
         return self.value
         
-class Nil(SelfEval):
+class Nil(SExpression):
     cache = None
     
     @classmethod
@@ -587,7 +587,6 @@ class Symbol(SExpression):
         
     def eval(self, frame, cont):
         return Trampolined.make(cont, frame.resolveSymbol(self))
-        #return frame.resolveSymbol(self)
 
     def isSymbol(self):
         return True
@@ -896,14 +895,13 @@ class CompoundProcedure(Procedure):
     def apply(self, operands, callingForm, cont = None):
         newFrame = self.bind(operands, callingForm)
         return self.body.evalSequence(newFrame, cont)
-        #return self.body.eval(newFrame, cont)
     
     def __str__(self):
         formals = ''
         if len(self.formals) > 0:
             formals = self.formals[0].name
             for f in self.formals[1:]:
-                formals.append(' ' + f.name)
+                formals + ' ' + f.name
         return '#<procedure ('+ formals + ')>'
 
 class Trampolined(SExpression):
@@ -994,6 +992,103 @@ class DefineForm(SpecialSyntax):
             procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
             frame.addSymbol(procName, procedure)
             return Trampolined.make(cont, Nil.make())
+
+class LambdaForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"lambda" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        formals = operands.car
+        if not formals.isSymbol() and not formals.isPair() and not formals.isNull():
+            raise ExpressionError(callingForm, '"lambda": Invalid type of the first operand')
+        body = operands.cdr
+        procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
+        return Trampolined.make(cont, procedure)
+        
+class LetForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"let" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        def step2(newFrame):
+            return operands.cdr.evalSequence(newFrame, cont)
+        return self.processBindings(operands.car, callingForm, frame, Frame(frame), step2)
+        
+    def processBindings(self, bindings, callingForm, oldFrame, newFrame, cont):
+        def step2(bindingValue):
+            if not binding.car.isSymbol():
+                raise ExpressionError(callingForm, '"let": incorrect binding form (first element is not a symbol).')
+            if binding.car.name in newFrame.symbols:
+                raise ExpressionError(callingForm, '"let": multiple uses of the same variable in the binding form.')
+            newFrame.symbols[binding.car.name] = bindingValue
+            return self.processBindings(bindings.cdr, callingForm, oldFrame, newFrame, cont)
+        if bindings.isNull():
+            return Trampolined.make(cont, newFrame)
+        binding = bindings.car
+        if not binding.isPair():
+            raise ExpressionError(callingForm, '"let": invalid binding form (not a list).')
+        if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"let": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+        return binding.cdr.car.eval(oldFrame, step2)
+
+class LetStarForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"let*" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        def step2(newFrame):
+            return operands.cdr.evalSequence(newFrame, cont)
+        return self.processBindings(operands.car, callingForm, frame, step2)
+        
+    def processBindings(self, bindings, callingForm, frame, cont):
+        def step2(bindingValue):
+            if not binding.car.isSymbol():
+                raise ExpressionError(callingForm, '"let*": incorrect binding form (first element is not a symbol).')
+            #if binding.car.name in newFrame.symbols:
+            #    raise ExpressionError(callingForm, '"let*": multiple uses of the same variable in the binding form.')
+            newFrame = Frame(frame)
+            newFrame.symbols[binding.car.name] = bindingValue
+            return self.processBindings(bindings.cdr, callingForm, newFrame, cont)
+        if bindings.isNull():
+            return Trampolined.make(cont, frame)
+        binding = bindings.car
+        if not binding.isPair():
+            raise ExpressionError(callingForm, '"let*": invalid binding form (not a list).')
+        if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"let*": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+        return binding.cdr.car.eval(frame, step2)
+
+class LetrecForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"letrec" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        def step2(newFrame):
+            def step3(newFrame2):
+                return operands.cdr.evalSequence(newFrame2, cont)
+            return self.processBindingValues(operands.car, callingForm, newFrame, step3)
+        return self.processBindingVariables(operands.car, callingForm, frame, Frame(frame), step2)
+        
+    def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
+        if bindings.isNull():
+            return Trampolined.make(cont, newFrame)
+        binding = bindings.car
+        if not binding.isPair():
+            raise ExpressionError(callingForm, '"letrec": invalid binding form (not a list).')
+        if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"letrec": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+        if not binding.car.isSymbol():
+            raise ExpressionError(callingForm, '"letrec": incorrect binding form (first element is not a symbol).')
+        if binding.car.name in newFrame.symbols:
+            raise ExpressionError(callingForm, '"letrec": multiple uses of the same variable in the binding form.')
+        newFrame.symbols[binding.car.name] = Nil.make()
+        return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
+        #return binding.cdr.car.eval(oldFrame, step2)
+
+    def processBindingValues(self, bindings, callingForm, frame, cont):
+        def step2(bindingValue):
+            frame.symbols[binding.car.name] = bindingValue
+            return self.processBindingValues(bindings.cdr, callingForm, frame, cont)
+        if bindings.isNull():
+            return Trampolined.make(cont, frame)
+        binding = bindings.car
+        return binding.cdr.car.eval(frame, step2)
 
 class CondForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):

@@ -1191,13 +1191,51 @@ class IfForm(SpecialSyntax):
 
 class CondForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):
-        pass
+        if operands.isNull():
+            raise ExpressionError(callingForm, '"cond" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        def step2(clause):
+            if clause.isPair():
+                return clause.cdr.car.eval(frame, cont)
+            else:
+                return Trampolined.make(cont, clause)
+        return self.processClauses(operands, callingForm, frame, step2)
+
+    def processClauses(self, clauses, callingForm, frame, cont):
+        if clauses.isNull():
+            return Trampolined.make(cont, Nil.make())
+        clause = clauses.car
+        if not clause.isPair() or not clause.cdr.isPair() or not clause.cdr.cdr.isNull():
+            raise ExpressionError(clause, '"cond": invalid clause format.')
+        def step2(boolValue):
+            if (not boolValue.isBoolean() or boolValue.value == True):
+                return Trampolined.make(cont, clause)
+            else:
+                return self.processClauses(clauses.cdr, callingForm, frame, cont)
+        if clauses.cdr.isNull() and clause.car.isSymbol() and clause.car.name == 'else':
+            return Trampolined.make(cont, clause)
+        return clause.car.eval(frame, step2)
 
 class AndForm(SpecialSyntax):
-    pass
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull():
+            return Trampolined.make(cont, Boolean.make(True))
+        def step2(result):
+            if (result.isBoolean() and result.value == False) or operands.cdr.isNull():
+                return Trampolined.make(cont, result)
+            else:
+                return self.apply(operands.cdr, callingForm, frame, cont)
+        return operands.car.eval(frame, step2)
     
 class OrForm(SpecialSyntax):
-    pass
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull():
+            return Trampolined.make(cont, Boolean.make(False))
+        def step2(result):
+            if not result.isBoolean() or result.value == True or operands.cdr.isNull():
+                return Trampolined.make(cont, result)
+            else:
+                return self.apply(operands.cdr, callingForm, frame, cont)
+        return operands.car.eval(frame, step2)
     
 class PrimitiveProcedure(Procedure):
     object = None
@@ -1518,6 +1556,34 @@ class ModuloProcedure(PrimitiveProcedure):
         if operands.cdr.car.value == 0:
             raise ExpressionError(callingForm, '"modulo": division by 0')
         res = Number.make(operands.car.value % operands.cdr.car.value)
+        return Trampolined.make(cont, res)
+
+class RemainderProcedure(PrimitiveProcedure):
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"remainder" requires 2 operands, provided ' + str(len(operands)) + '.')
+        if not operands.car.isNumber():
+            raise ExpressionError(callingForm, '"remainder": operand is not a Number')
+        if not operands.cdr.car.isNumber():
+            raise ExpressionError(callingForm, '"remainder": operand is not a Number')
+        if operands.cdr.car.value == 0:
+            raise ExpressionError(callingForm, '"remainder": division by 0')
+        dividend = operands.car.value
+        divisor = operands.cdr.car.value
+        res = Number.make(dividend - divisor*int(float(dividend)/divisor))
+        return Trampolined.make(cont, res)
+
+class QuotientProcedure(PrimitiveProcedure):
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"quotient" requires 2 operands, provided ' + str(len(operands)) + '.')
+        if not operands.car.isNumber():
+            raise ExpressionError(callingForm, '"quotient": operand is not a Number')
+        if not operands.cdr.car.isNumber():
+            raise ExpressionError(callingForm, '"quotient": operand is not a Number')
+        if operands.cdr.car.value == 0:
+            raise ExpressionError(callingForm, '"quotient": division by 0')
+        res = Number.make(operands.car.value // operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
 class WriteCharProcedure(PrimitiveProcedure):

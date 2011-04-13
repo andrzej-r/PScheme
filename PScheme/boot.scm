@@ -19,10 +19,27 @@
 (define (odd? x)
     (= (modulo x 2) 1))
 
-(define (gcd m n)
-    ( cond ( ( < m n ) ( gcd n m) )
-        ( ( = (remainder m n ) 0) n)
-           (#t (gcd n (remainder m n)))))
+(define (sign x)
+  (cond ((> x 0) 1)
+	((< x 0) -1)
+	(#t 0)))
+
+(define (gcd . l)
+  (define (helper a b)
+    (if (= b 0) a
+	(helper b (modulo a b))))
+  (cond ((null? l) 0)
+	(else (abs (helper (car l) (apply gcd (cdr l)))))))
+
+(define lcm
+  (lambda a
+    (if (null? a)
+      1
+      (let ((aa (abs (car a)))
+            (bb (abs (cadr a))))
+         (if (or (= aa 0) (= bb 0))
+             0
+             (abs (* (quotient aa (gcd aa bb)) bb)))))))
 
 (define (caar l)   (car   (car l)))
 (define (cadr l)   (car   (cdr l)))
@@ -63,11 +80,9 @@
         (* n (fac (- n 1)))))
 
 (define (fib n)
-    (if (= n 0)
-        0
-        (if (= n 1)
-            1
-            (+ (fib (- n 1)) (fib (- n 2))))))
+    (cond ((= n 0) 0)
+	  ((= n 1) 1)
+	  (else (+ (fib (- n 1)) (fib (- n 2))))))
 
 (define zero (- 1 1))
 (define one (+ zero 1))

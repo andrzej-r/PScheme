@@ -114,11 +114,9 @@ class PSchemeTest(unittest.TestCase):
         (* n (fac (- n 1)))))
 
 (define (fib n)
-    (if (= n 0)
-        0
-        (if (= n 1)
-            1
-            (+ (fib (- n 1)) (fib (- n 2))))))
+    (cond ((= n 0) 0)
+	  ((= n 1) 1)
+	  (else (+ (fib (- n 1)) (fib (- n 2))))))
 
 (define (odd? n)
     (if (= n 0)
@@ -129,6 +127,11 @@ class PSchemeTest(unittest.TestCase):
         #t
         (odd? (- n 1))))
         """
+        self.assertEqual(self.tpes("(fac 12)"), ['479001600'])
+        #broken in python 2.x (python 3 uses 'ints', python 2 requires 'longs')
+        #self.assertEqual(self.tpes("(fac 200)"), ['788657867364790503552363213932185062295135977687173263294742533244359449963403342920304284011984623904177212138919638830257642790242637105061926624952829931113462857270763317237396988943922445621451664240254033291864131227428294853277524242407573903240321257405579568660226031904170324062351700858796178922222789623703897374720000000000000000000000000000000000000000000000000'])
+        self.assertEqual(self.tpes("(fib 0)"), ['0'])
+        self.assertEqual(self.tpes("(fib 13)"), ['233'])
         self.assertEqual(self.tpes("(even? 1002)"), ['#t'])
         self.assertEqual(self.tpes("(odd? 1002)"), ['#f'])
         
@@ -162,6 +165,51 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("((lambda (x y . z) z) 3 4 5 6)"), ["(5 6)"])
         
         
+    def test_conditionals(self):
+        "from R5RS 4.2.1"
+        s = """
+  (cond ((> 3 2) 'greater)
+        ((< 3 2) 'less))
+        """
+        self.assertEqual(self.tpe(s), [Symbol.make('greater')])
+        s = """
+  (cond ((> 3 3) 'greater)
+        ((< 3 3) 'less)
+        (else 'equal))
+        """
+        self.assertEqual(self.tpe(s), [Symbol.make('equal')])
+        s = """
+  (cond ((assv 'b '((a 1) (b 2))) => cadr)
+        (else #f))
+        """
+        #self.assertEqual(self.tpe(s), [Number.make(2)])
+        s = """
+  (case (* 2 3)
+    ((2 3 5 7) 'prime)
+    ((1 4 6 8 9) 'composite))
+        """
+        #self.assertEqual(self.tpe(s), [Symbol.make('composite')])
+        s = """
+  (case (car '(c d))
+    ((a) 'a)
+    ((b) 'b))        """
+        #self.assertEqual(self.tpe(s), [Symbol.make('composite')]) # unspecified
+        s = """
+  (case (car '(c d))
+    ((a e i o u) 'vowel)
+    ((w y) 'semivowel)
+    (else 'consonant))        """
+        #self.assertEqual(self.tpe(s), [Symbol.make('consonant')])
+        self.assertEqual(self.tpes("(and (= 2 2) (> 2 1))"), ['#t'])
+        self.assertEqual(self.tpes("(and (= 2 2) (< 2 1))"), ['#f'])
+        self.assertEqual(self.tpes("(and 1 2 'c '(f g))"), ['(f g)'])
+        self.assertEqual(self.tpes("(and)"), ['#t'])
+
+        self.assertEqual(self.tpes("(or (= 2 2) (> 2 1))"), ['#t'])
+        self.assertEqual(self.tpes("(or (= 2 2) (< 2 1))"), ['#t'])
+        self.assertEqual(self.tpes("(or #f #f #f)"), ['#f'])
+        #self.assertEqual(self.tpes("(or (memq 'b '(a b c)) (/ 3 0))"), ['(b c)'])
+
     def test_bindings(self):
         "from R5RS 4.2.2"
         self.assertEqual(self.tpe("(let ((x 2) (y 3)) (* x y))"), [Number.make(6)])
@@ -241,7 +289,7 @@ class PSchemeTest(unittest.TestCase):
         "from R5RS 6.1"
         self.assertEqual(self.tpes("(eq? 'a 'a)"), ['#t'])
         self.assertEqual(self.tpes("(eq? '(a) '(a))"), ['#f']) # unspecified
-        #self.assertEqual(self.tpes("(eq? (list 'a) (list 'a))"), ['#f'])
+        self.assertEqual(self.tpes("(eq? (list 'a) (list 'a))"), ['#f'])
         self.assertEqual(self.tpes('(eq? "a" "a")'), ['#f']) # unspecified
         self.assertEqual(self.tpes('(eq? "" "")'), ['#f']) # unspecified
         self.assertEqual(self.tpes("(eq? '() '())"), ['#t'])
@@ -293,23 +341,23 @@ class PSchemeTest(unittest.TestCase):
 
         self.assertEqual(self.tpe("(abs -7)"), [Number.make(7)])
         
-        #self.assertEqual(self.tpes("(= 3 (+ (* 5 (quotient 3 5)) (remainder 3 5)))"), ['#t'])
+        self.assertEqual(self.tpes("(= 3 (+ (* 5 (quotient 3 5)) (remainder 3 5)))"), ['#t'])
         
         self.assertEqual(self.tpe("(modulo 13 4)"), [Number.make(1)])
-        #self.assertEqual(self.tpe("(remainder 13 4)"), [Number.make(1)])
+        self.assertEqual(self.tpe("(remainder 13 4)"), [Number.make(1)])
         self.assertEqual(self.tpe("(modulo -13 4)"), [Number.make(3)])
-        #self.assertEqual(self.tpe("(remainder -13 4)"), [Number.make(-1)])
+        self.assertEqual(self.tpe("(remainder -13 4)"), [Number.make(-1)])
         self.assertEqual(self.tpe("(modulo 13 -4)"), [Number.make(-3)])
-        #self.assertEqual(self.tpe("(remainder 13 -4)"), [Number.make(1)])
+        self.assertEqual(self.tpe("(remainder 13 -4)"), [Number.make(1)])
         self.assertEqual(self.tpe("(modulo -13 -4)"), [Number.make(-1)])
-        #self.assertEqual(self.tpe("(remainder -13 -4)"), [Number.make(-1)])
-        #self.assertEqual(self.tpe("(remainder -13 -4.0)"), [Number.make(-1.0)])
+        self.assertEqual(self.tpe("(remainder -13 -4)"), [Number.make(-1)])
+        self.assertEqual(self.tpe("(remainder -13 -4.0)"), [Number.make(-1.0)])
         
-        #self.assertEqual(self.tpe("(gcd 32 -36)"), [Number.make(4)])
-        #self.assertEqual(self.tpe("(gcd)"), [Number.make(0)])
-        #self.assertEqual(self.tpe("(lcm 32 -36)"), [Number.make(288)])
-        #self.assertEqual(self.tpe("(lcm 32.0 -36)"), [Number.make(288.0)])
-        #self.assertEqual(self.tpe("(lcm)"), [Number.make(1)])
+        self.assertEqual(self.tpe("(gcd 32 -36)"), [Number.make(4)])
+        self.assertEqual(self.tpe("(gcd)"), [Number.make(0)])
+        self.assertEqual(self.tpe("(lcm 32 -36)"), [Number.make(288)])
+        self.assertEqual(self.tpe("(lcm 32.0 -36)"), [Number.make(288.0)])
+        self.assertEqual(self.tpe("(lcm)"), [Number.make(1)])
         
         #self.assertEqual(self.tpe("(numerator (/ 6 4))"), [Number.make(3)])
         #self.assertEqual(self.tpe("(denominator (/ 6 4))"), [Number.make(2)])

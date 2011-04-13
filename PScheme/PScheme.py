@@ -61,11 +61,11 @@ class ExpressionError(Exception):
         if not 'meta' in self.expr.__dict__:
             return 'Error: ' + self.msg
         fileName = self.expr.meta['fileName']
-        line = self.expr.meta['line']
+        line = self.expr.meta['line'].rstrip()
         lineNo = str(self.expr.meta['lineNo'])
         start = self.expr.meta['colStart']
         span = self.expr.meta['colEnd'] - start
-        return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
+        return ' Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
         
     def __repr__(self):
         return '<Expression Error ' + self.msg + '>'
@@ -115,6 +115,7 @@ class Tokenizer(object):
         @line line of text (string)
         """
         #print line
+        line = line.expandtabs()
         self.lineNo += 1
         for token_match in self.ptokens.finditer(line): #.decode('utf8')):
             if not token_match.group().startswith(';'):
@@ -1252,7 +1253,6 @@ class ConsProcedure(PrimitiveProcedure):
         expr1 = operands.car
         expr2 = operands.cdr.car
         res = Pair.make(expr1, expr2)
-        #res.meta = callingForm.meta
         return Trampolined.make(cont, res)
 
 class CarProcedure(PrimitiveProcedure):
@@ -1278,11 +1278,12 @@ class CdrProcedure(PrimitiveProcedure):
 class Append2Procedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"append" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise ExpressionError(callingForm, '"append2" requires 2 operands, provided ' + str(len(operands)) + '.')
         expr1 = operands.car
         expr2 = operands.cdr.car
+        if (not expr1.isNull() and not expr1.isPair()) or (not expr2.isNull() and not expr2.isPair()):
+            raise ExpressionError(callingForm, '"append2": operands must be lists.')
         res = expr1.append(expr2)
-        #res.meta = callingForm.meta
         return Trampolined.make(cont, res)
 
 class NotProcedure(PrimitiveProcedure):

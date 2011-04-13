@@ -105,18 +105,23 @@
 		 (helper (car lists) (cdr lists)))))
   (helper list1 lists))
         
-(define (list . l)
-  (if (null? l)
-      l
-      (cons (car l)
-	    (apply list (cdr l)))))
-
 (define (reverse l)
   (define (helper result l)
     (if (null? l)
 	result
 	(helper (cons (car l) result) (cdr l))))
   (helper '() l))
+
+(define (list-slow . l)
+  (if (null? l)
+      l
+      (cons (car l)
+	    (apply list-slow (cdr l)))))
+
+(define (list . l)
+  (if (null? l)
+      l
+      (reverse (reverse l))))
 
 (define list-tail
   (lambda (x k)

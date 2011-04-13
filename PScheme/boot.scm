@@ -96,11 +96,30 @@
         (odd (- n 1))))
 
 (define (identity x) x)
-(define (list . l)
-    (define (helper tail result)
-        (if (null? tail)
-            result
-            (helper (cdr tail) (cons (car tail) result))))
-    (helper l '()))
-    
+
+(define (append list1 . lists)
+  (define (helper list1 lists)
+    (if (null? lists)
+	list1
+	(append2 list1
+		 (helper (car lists) (cdr lists)))))
+  (helper list1 lists))
         
+(define (list . l)
+  (if (null? l)
+      l
+      (cons (car l)
+	    (apply list (cdr l)))))
+
+(define (reverse l)
+  (define (helper result l)
+    (if (null? l)
+	result
+	(helper (cons (car l) result) (cdr l))))
+  (helper '() l))
+
+(define list-tail
+  (lambda (x k)
+    (if (zero? k)
+        x
+        (list-tail (cdr x) (- k 1)))))

@@ -647,8 +647,8 @@ class Null(SExpression):
     def evalElements(self, frame, cont, excp=None):
         return Trampolined.make(cont, self)
         
-    def toList(self):
-        return []
+    def append(self, pair):
+        return pair
         
     def isNull(self):
         return True
@@ -745,6 +745,20 @@ class Pair(SExpression):
                             tail = tail.cdr
         except StopIteration:
             raise ExpressionError(token, 'Unterminated list.')
+        
+    def append(self, pair):
+        res = Pair.make(self.car, self.cdr)
+        pointer = self
+        resPointer = res
+        while pointer.cdr.isPair():
+            resPointer.cdr = Pair.make(pointer.cdr.car, pointer.cdr.cdr)
+            pointer = pointer.cdr
+            resPointer = resPointer.cdr
+        if not pointer.cdr.isNull():
+            resPointer.cdr = Pair.make(pointer.cdr, Null.make())
+            resPointer = resPointer.cdr
+        resPointer.cdr = pair
+        return res
         
     def toList(self):
         lst = [self.car]
@@ -925,6 +939,20 @@ class CompoundProcedure(Procedure):
             raise ExpressionError(self, 'Invalid procedure operand name')
         
     def bind(self, formals, operands, callingForm, frame, cont):
+        if formals.isNull() and operands.isNull():
+            return Trampolined.make(cont, frame)
+        elif formals.isSymbol():
+            frame.addSymbol(formals, operands)
+            return Trampolined.make(cont, frame)
+        elif formals.isPair() and operands.isPair():
+            frame.addSymbol(formals.car, operands.car)
+            return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
+        elif formals.isList():
+            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
+        else:
+            raise ExpressionError(callingForm, 'Wrong number of operands, required at least ' + str(len(self.formals) - 1) + '.')
+        
+    def bind_(self, formals, operands, callingForm, frame, cont):
         if operands.isNull() and formals.isPair():
             raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
         if operands.isNull() and formals.isNull():
@@ -936,14 +964,6 @@ class CompoundProcedure(Procedure):
             frame.addSymbol(formals.car, operands.car)
             return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
         raise ExpressionError(callingForm, 'Wrong format of operands.')
-        
-    def bind_(self, operands, callingForm):
-        if len(self.formals) != len(operands):
-            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + ', provided ' + str(len(operands)) + '.')
-        newFrame = Frame(self.frame)
-        for t in zip(self.formals, operands):
-            newFrame.addSymbol(t[0], t[1])
-        return newFrame
         
     def apply(self, operands, callingForm, cont = None):
         def step2(newFrame):
@@ -1182,6 +1202,7 @@ class PrimitiveProcedure(Procedure):
     object = None
 
     primitiveFunctions = {
+        'null?':        lambda: IsNullProcedure.make(),
         'eq?':          lambda: EqProcedure.make(),
         'eqv?':         lambda: EqvProcedure.make(),
         'equal?':       lambda: EqualProcedure.make(),
@@ -1193,6 +1214,7 @@ class PrimitiveProcedure(Procedure):
         'cons':         lambda: ConsProcedure.make(),
         'car':          lambda: CarProcedure.make(),
         'cdr':          lambda: CdrProcedure.make(),
+        'append2':      lambda: Append2Procedure.make(),
         'not':          lambda: NotProcedure.make(),
         '+':            lambda: SumProcedure.make(),
         '-':            lambda: SubtractProcedure.make(),
@@ -1203,6 +1225,7 @@ class PrimitiveProcedure(Procedure):
         'remainder':    lambda: RemainderProcedure.make(),
         'write-char':   lambda: WriteCharProcedure.make(),
         'display':      lambda: DisplayProcedure.make(),
+        'apply':        lambda: ApplyProcedure.make(),
         'call-with-current-continuation': lambda: CallCCProcedure.make(),
         'call/cc':      lambda: CallCCProcedure.make(),
     }
@@ -1216,6 +1239,12 @@ class PrimitiveProcedure(Procedure):
     def __str__(self):
         return '#<' + self.__class__.__name__ + '>'
     
+class IsNullProcedure(PrimitiveProcedure):
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+        return Trampolined.make(cont, Boolean.make(operands.car.isNull()))
+
 class ConsProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
@@ -1246,6 +1275,16 @@ class CdrProcedure(PrimitiveProcedure):
         res = arg.cdr
         return Trampolined.make(cont, res)
             
+class Append2Procedure(PrimitiveProcedure):
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"append" requires 2 operands, provided ' + str(len(operands)) + '.')
+        expr1 = operands.car
+        expr2 = operands.cdr.car
+        res = expr1.append(expr2)
+        #res.meta = callingForm.meta
+        return Trampolined.make(cont, res)
+
 class NotProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
@@ -1319,12 +1358,12 @@ class NumEqProcedure(PrimitiveProcedure):
         value = True
         first = operands.car
         if not first.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"=": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '"=": operand is not a Number')
             if n.value != first.value:
                 value = False
             cdr = cdr.cdr
@@ -1338,12 +1377,12 @@ class NumLTProcedure(PrimitiveProcedure):
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"<": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '"<": operand is not a Number')
             if previous.value >= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1358,12 +1397,12 @@ class NumLTEProcedure(PrimitiveProcedure):
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"<=": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '"<=": operand is not a Number')
             if previous.value > n.value:
                 value = False
             cdr = cdr.cdr
@@ -1378,12 +1417,12 @@ class NumGTProcedure(PrimitiveProcedure):
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '">": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '">": operand is not a Number')
             if previous.value <= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1398,12 +1437,12 @@ class NumGTEProcedure(PrimitiveProcedure):
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '">=": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '">=": operand is not a Number')
             if previous.value < n.value:
                 value = False
             cdr = cdr.cdr
@@ -1416,7 +1455,7 @@ class SumProcedure(PrimitiveProcedure):
         value = 0
         for n in operands:
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '"+": operand is not a Number')
             value += n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1426,14 +1465,14 @@ class SubtractProcedure(PrimitiveProcedure):
         if operands.isNull():
             raise ExpressionError(callingForm, '"-" requires at least 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"-": operand is not a Number')
         if operands.cdr.isNull():
             res = Number.make(-operands.car.value)
         else:
             value = operands.car.value
             for n in operands.cdr:
                 if not n.isNumber():
-                    raise ExpressionError(callingForm, 'operand is not a Number')
+                    raise ExpressionError(callingForm, '"-": operand is not a Number')
                 value -= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1443,7 +1482,7 @@ class MultiplyProcedure(PrimitiveProcedure):
         value = 1
         for n in operands:
             if not n.isNumber():
-                raise ExpressionError(callingForm, 'operand is not a Number')
+                raise ExpressionError(callingForm, '"*": operand is not a Number')
             value *= n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1453,16 +1492,16 @@ class DivideProcedure(PrimitiveProcedure):
         if operands.isNull():
             raise ExpressionError(callingForm, '"/" requires at least 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"/": operand is not a Number')
         if operands.cdr.isNull():
             res = Number.make(1.0/operands[0].value)
         else:
             value = float(operands.car.value)
             for n in operands.cdr:
                 if not n.isNumber():
-                    raise ExpressionError(callingForm, 'operand is not a Number')
+                    raise ExpressionError(callingForm, '"/": operand is not a Number')
                 if n.value == 0:
-                    raise ExpressionError(callingForm, 'division by 0')
+                    raise ExpressionError(callingForm, '"/": division by 0')
                 value /= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1472,11 +1511,11 @@ class ModuloProcedure(PrimitiveProcedure):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise ExpressionError(callingForm, '"modulo" requires 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"modulo": operand is not a Number')
         if not operands.cdr.car.isNumber():
-            raise ExpressionError(callingForm, 'operand is not a Number')
+            raise ExpressionError(callingForm, '"modulo": operand is not a Number')
         if operands.cdr.car.value == 0:
-            raise ExpressionError(callingForm, 'division by 0')
+            raise ExpressionError(callingForm, '"modulo": division by 0')
         res = Number.make(operands.car.value % operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
@@ -1485,7 +1524,7 @@ class WriteCharProcedure(PrimitiveProcedure):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise ExpressionError(callingForm, '"write-char" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isChar():
-            raise ExpressionError(callingForm, 'operand is not a Character')
+            raise ExpressionError(callingForm, '"write-char": operand is not a Character')
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
@@ -1496,11 +1535,21 @@ class DisplayProcedure(PrimitiveProcedure):
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
+class ApplyProcedure(PrimitiveProcedure):
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull():
+            raise ExpressionError(callingForm, '"apply" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+        procedure = operands.car
+        if not procedure.isProcedure():
+            raise ExpressionError(callingForm, '"apply": first operand must be a procedure.')
+        operands = Pair.makeFromList(list(operands.cdr[0:-1]) + list(operands[-1]))
+        return procedure.apply(operands, callingForm, cont)
+
 class CallCCProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise ExpressionError(callingForm, '"call/cc" requires 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isProcedure():
-            raise ExpressionError(callingForm, '"call/cc" operand must be a procedure.')
+            raise ExpressionError(callingForm, '"call/cc": operand must be a procedure.')
         continuation = Continuation.make(cont)
         return operands.car.apply(Pair.makeFromList([continuation]), callingForm, cont)

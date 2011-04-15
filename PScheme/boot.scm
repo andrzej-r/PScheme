@@ -143,3 +143,18 @@
     (if (zero? k)
         x
         (list-tail (cdr x) (- k 1)))))
+
+(define (map_ function list)
+    (if (null? list)
+        list
+        (cons (function (car list)) (map_ function (cdr list)))))
+        
+(define (map function lst)
+    (define (helper result lst)
+        (if (null? lst)
+            result
+           (helper (cons (function (car lst)) result) (cdr lst))))
+    (reverse (helper '() lst)))
+    
+            
+        

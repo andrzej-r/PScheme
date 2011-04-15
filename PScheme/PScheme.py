@@ -1351,7 +1351,7 @@ class PrimitiveProcedure(Procedure):
         'remainder':    lambda: RemainderProcedure.make(),
         'write-char':   lambda: WriteCharProcedure.make(),
         'display':      lambda: DisplayProcedure.make(),
-        'apply':        lambda: ApplyProcedure.make(),
+        'apply2':       lambda: Apply2Procedure.make(),
         'call-with-current-continuation': lambda: CallCCProcedure.make(),
         'call/cc':      lambda: CallCCProcedure.make(),
     }
@@ -1689,14 +1689,17 @@ class DisplayProcedure(PrimitiveProcedure):
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
-class ApplyProcedure(PrimitiveProcedure):
+class Apply2Procedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"apply" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise ExpressionError(callingForm, '"apply2" requires 2 operands, provided ' + str(len(operands)) + '.')
         procedure = operands.car
         if not procedure.isProcedure():
-            raise ExpressionError(callingForm, '"apply": first operand must be a procedure.')
-        operands = Pair.makeFromList(list(operands.cdr[0:-1]) + list(operands[-1]))
+            raise ExpressionError(callingForm, '"apply2": first operand must be a procedure.')
+        operands = operands.cdr.car
+        #if not operands.isNull() and not operands.isPair():
+        if not operands.isList():
+            raise ExpressionError(callingForm, '"apply2": second operand must be a list.')
         return procedure.apply(operands, callingForm, cont)
 
 class CallCCProcedure(PrimitiveProcedure):

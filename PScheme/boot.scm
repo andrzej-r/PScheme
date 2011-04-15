@@ -156,5 +156,11 @@
            (helper (cons (function (car lst)) result) (cdr lst))))
     (reverse (helper '() lst)))
     
-            
-        
+(define (apply function . operands)
+  (define (merge lst)
+    (if (null? lst)
+	lst
+	(if (null? (cdr lst))
+	    (car lst)
+	    (cons (car lst) (merge (cdr lst))))))
+  (apply2 function (merge operands)))

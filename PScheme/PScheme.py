@@ -96,9 +96,12 @@ class Tokenizer(object):
     char = r'(?:#\\\S\w*)'
     boolean = r'(?:#(?:t|f))'
     quote = r'(?:\')'
+    quasiquote = r'(?:\`)'
+    unquote_splicing = r'(?:\,@)'
+    unquote = r'(?:\,)'
     other = r'(?:\S+)'
     
-    tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote + '|' + other
+    tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote + '|' + quasiquote + '|' + unquote_splicing + '|' + unquote + '|' + other
     
     ptokens = re.compile(tokens, flags)
     #ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
@@ -234,6 +237,24 @@ class SExpression(object):
                 expr.meta = token.meta
             except StopIteration:
                 raise(ExpressionError(token, 'Nothing to quote.'))
+        elif text == '`':
+            try:
+                expr = Pair.makeFromList([Symbol.make('quasiquote'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
+                expr.meta = token.meta
+            except StopIteration:
+                raise(ExpressionError(token, 'Nothing to quasiquote.'))
+        elif text == ',':
+            try:
+                expr = Pair.makeFromList([Symbol.make('unquote'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
+                expr.meta = token.meta
+            except StopIteration:
+                raise(ExpressionError(token, 'Nothing to unquote.'))
+        elif text == ',@':
+            try:
+                expr = Pair.makeFromList([Symbol.make('unquote-splicing'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
+                expr.meta = token.meta
+            except StopIteration:
+                raise(ExpressionError(token, 'Nothing to unquote-splicing.'))
         elif SExpression.psymbol.match(text):
             expr = Symbol.parseToken(token)
         else:
@@ -683,6 +704,7 @@ class Pair(SExpression):
         self = cls()
         self.car = car
         self.cdr = cdr
+        self.quasiquoted = False
         return self
     
     @classmethod
@@ -731,6 +753,7 @@ class Pair(SExpression):
                         error = True
                     elif t.text == ')':
                         if error or tail.isPair(): #earlier error or 0 tokens after the dot
+                            print self
                             raise ExpressionError(token, 'Wrong improper list format.')
                         self = self.cdr #discard empty car
                         self.meta = token.meta
@@ -860,6 +883,16 @@ class Pair(SExpression):
             yield cdr
 
     def __str__(self):
+        if self.car.isSymbol() and self.cdr.isPair() and self.cdr.cdr.isNull():
+            s = self.car.name
+            if s == 'quote':
+                return '\'' + str(self.cdr.car)
+            if s == 'quasiquote':
+                return '`' + str(self.cdr.car)
+            if s == 'unquote':
+                return ',' + str(self.cdr.car)
+            if s == 'unquote-splicing':
+                return ',@' + str(self.cdr.car)
         string = '(' + str(self.car)
         cdr = self.cdr
         while cdr.isPair():
@@ -996,20 +1029,23 @@ class SpecialSyntax(SExpression):
     object = None
     
     specialForms = {
-        'quote':        lambda: QuoteForm.make(),
-        'define':       lambda: DefineForm.make(),
-        'lambda':       lambda: LambdaForm.make(),
-        'let':          lambda: LetForm.make(),
-        'let*':         lambda: LetStarForm.make(),
-        'letrec':       lambda: LetrecForm.make(),
-        'set!':         lambda: SetForm.make(),
-        'set-car!':     lambda: SetCarForm.make(),
-        'set-cdr!':     lambda: SetCdrForm.make(),
-        'if':           lambda: IfForm.make(),
-        'cond':         lambda: CondForm.make(),
-        'case':         lambda: CaseForm.make(),
-        'and':          lambda: AndForm.make(),
-        'or':           lambda: OrForm.make(),
+        'quote':            lambda: QuoteForm.make(),
+        'quasiquote':       lambda: QuasiQuoteForm.make(),
+        'unquote':          lambda: UnQuoteForm.make(),
+        'unquote-splicing': lambda: UnQuoteSplicingForm.make(),
+        'define':           lambda: DefineForm.make(),
+        'lambda':           lambda: LambdaForm.make(),
+        'let':              lambda: LetForm.make(),
+        'let*':             lambda: LetStarForm.make(),
+        'letrec':           lambda: LetrecForm.make(),
+        'set!':             lambda: SetForm.make(),
+        'set-car!':         lambda: SetCarForm.make(),
+        'set-cdr!':         lambda: SetCdrForm.make(),
+        'if':               lambda: IfForm.make(),
+        'cond':             lambda: CondForm.make(),
+        'case':             lambda: CaseForm.make(),
+        'and':              lambda: AndForm.make(),
+        'or':               lambda: OrForm.make(),
         
     }
 
@@ -1037,6 +1073,60 @@ class QuoteForm(SpecialSyntax):
             raise ExpressionError(callingForm, '"quote" requires 1 operand, ' + str(len(operands)) + ' given.')
         res = operands.car
         return Trampolined.make(cont, res)
+
+class QuasiQuoteForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont = None):
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"quasiquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+        def step2(expr):
+            return Trampolined.make(cont, expr)
+        return self.processExpression(operands.car, callingForm, frame, step2)
+
+    def processExpression(self, expr, callingForm, frame, cont):
+        def unsplice(lst, cont):
+            def step2(cdr):
+                return Trampolined.make(cont, Pair.make(lst.car, cdr))
+            if lst.isNull():
+                return self.processExpression(expr.cdr, callingForm, frame, cont)
+            return unsplice(lst.cdr, step2)
+            
+        if not expr.isPair():
+            return Trampolined.make(cont, expr)
+        else:
+            def step2(car):
+                def step3(cdr):
+                    return Trampolined.make(cont, Pair.make(car, cdr))
+                return self.processExpression(expr.cdr, callingForm, frame, step3)
+            expr.quasiquoted = True
+            if expr.car.isSymbol() and expr.car.name == 'unquote':
+                    return expr.eval(frame, cont)
+            if expr.car.isPair() and expr.car.car.isSymbol() and expr.car.car.name == 'unquote-splicing':
+                def ustep2(lst):
+                    if not lst.isNull() and not lst.isPair():
+                        raise ExpressionError(callingForm, '"unquote-splicing": operand is not a list.')
+                    return unsplice(lst, cont)
+                expr.car.quasiquoted = True
+                return expr.car.eval(frame, ustep2)
+            return self.processExpression(expr.car, callingForm, frame, step2)
+        
+            
+class UnQuoteForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont):
+        if callingForm.quasiquoted:
+            if operands.isNull() or operands.cdr.isPair():
+                raise ExpressionError(callingForm, '"unquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            return operands.car.eval(frame, cont)
+        else:
+            raise ExpressionError(callingForm, '"unquote" outside of "quasiquote".')
+
+class UnQuoteSplicingForm(SpecialSyntax):
+    def apply(self, operands, callingForm, frame, cont = None):
+        if callingForm.quasiquoted:
+            if operands.isNull() or operands.cdr.isPair():
+                raise ExpressionError(callingForm, '"unquote-splicing" requires 1 operand, ' + str(len(operands)) + ' given.')
+            return operands.car.eval(frame, cont)
+        else:
+            raise ExpressionError(callingForm, '"unquote-splicing" outside of "quasiquote".')
 
 class DefineForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):

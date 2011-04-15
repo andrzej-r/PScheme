@@ -168,9 +168,7 @@ class Frame(object):
                 yield Error.make(e)
             
     def resolveSymbol(self, symbol):
-        if symbol.name in SpecialSyntax.specialForms:
-            return SpecialSyntax.specialForms[symbol.name]()
-        elif symbol.name in self.symbols:
+        if symbol.name in self.symbols:
             return self.symbols[symbol.name]
         elif self.parentFrame:
             return self.parentFrame.resolveSymbol(symbol)
@@ -797,11 +795,11 @@ class Pair(SExpression):
         def step2(operator):
             def step3(operands):
                 return operator.apply(operands, self, cont)
-            if operator.isSpecialSyntax():
-                return operator.apply(self.cdr, self, frame, cont)
-            elif not operator.isProcedure():
+            if not operator.isProcedure():
                 raise ExpressionError(self, 'procedure application, first operand is not a procedure.')
             return self.cdr.evalElements(frame, step3, ExpressionError(self, '"eval": improper operand list'))
+        if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms:
+            return SpecialSyntax.specialForms[self.car.name]().apply(self.cdr, self, frame, cont)
         return self.car.eval(frame, step2)
 
     def evalElements(self, frame, cont, excp=None):

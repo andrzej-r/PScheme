@@ -241,7 +241,24 @@ class PSchemeTest(unittest.TestCase):
         (even? 88))        """
         self.assertEqual(self.tpes(s), ['#t'])
         
+    def test_quasiquotation(self):
+        "from R5RS 4.2.6"
+        self.assertEqual(self.tpes("`(list ,(+ 1 2) 4)"), ['(list 3 4)'])
+        self.assertEqual(self.tpes("(let ((name 'a)) `(list ,name ',name))"), ["(list a 'a)"]) #'(list a (quote a))'
+        self.assertEqual(self.tpes("`(a ,(+ 1 2) ,@(map abs '(4 -5 6)) b)"), ['(a 3 4 5 6 b)'])
+        #self.assertEqual(self.tpes("`(( foo ,(- 10 3)) ,@(cdr '(c)) . ,(car '(cons)))"), ['((foo 7) . cons)'])
+        #self.assertEqual(self.tpes("`#(10 5 ,(sqrt 4) ,@(map sqrt '(16 9)) 8)"), ['#(10 5 2 4 3 8)'])
 
+        #self.assertEqual(self.tpes("`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)"), ["(a `(b ,(+ 1 2) ,(foo 4 d) e) f)"])
+        s = """
+(let ((name1 'x)
+      (name2 'y))
+  `(a `(b ,,name1 ,',name2 d) e))           
+        """
+        #self.assertEqual(self.tpes(s), ["(a `(b ,x ,'y d) e)"])
+        self.assertEqual(self.tpes("(quasiquote (list (unquote (+ 1 2)) 4))"), ["(list 3 4)"])
+        self.assertEqual(self.tpes("'(quasiquote (list (unquote (+ 1 2)) 4))"), ["`(list ,(+ 1 2) 4)"]) #(quasiquote (list (unquote (+ 1 2)) 4))
+        
     def test_eqv(self):
         "from R5RS 6.1"
         self.assertEqual(self.tpes("(eqv? 'a 'a)"), ['#t'])

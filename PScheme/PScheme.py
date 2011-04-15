@@ -165,7 +165,9 @@ class Frame(object):
                 yield Error.make(e)
             
     def resolveSymbol(self, symbol):
-        if symbol.name in self.symbols:
+        if symbol.name in SpecialSyntax.specialForms:
+            return SpecialSyntax.specialForms[symbol.name]()
+        elif symbol.name in self.symbols:
             return self.symbols[symbol.name]
         elif self.parentFrame:
             return self.parentFrame.resolveSymbol(symbol)
@@ -228,15 +230,12 @@ class SExpression(object):
             expr = Boolean.parseToken(token)
         elif text == '\'':
             try:
-                expr = Pair.makeFromList([SpecialSyntax.specialForms['quote'](), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
+                expr = Pair.makeFromList([Symbol.make('quote'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
                 expr.meta = token.meta
             except StopIteration:
                 raise(ExpressionError(token, 'Nothing to quote.'))
         elif SExpression.psymbol.match(text):
-            if text in SpecialSyntax.specialForms:
-                expr = SpecialSyntax.specialForms[text]()
-            else:
-                expr = Symbol.parseToken(token)
+            expr = Symbol.parseToken(token)
         else:
             raise(ExpressionError(token, 'Unrecognized token "' + text + '"'))
         return expr
@@ -772,12 +771,12 @@ class Pair(SExpression):
         return lst + [cdr]
         
     def eval(self, frame, cont):
-        if self.car.isSpecialSyntax():
-            return self.car.apply(self.cdr, self, frame, cont)
         def step2(operator):
             def step3(operands):
                 return operator.apply(operands, self, cont)
-            if not operator.isProcedure():
+            if operator.isSpecialSyntax():
+                return operator.apply(self.cdr, self, frame, cont)
+            elif not operator.isProcedure():
                 raise ExpressionError(self, 'procedure application, first operand is not a procedure.')
             return self.cdr.evalElements(frame, step3, ExpressionError(self, '"eval": improper operand list'))
         return self.car.eval(frame, step2)

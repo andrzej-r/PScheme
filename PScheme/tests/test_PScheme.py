@@ -80,8 +80,8 @@ class PSchemeTest(unittest.TestCase):
         #e = []
         #for n in e2:
         #    e.append(n.eval(f))
-        self.assertEqual(e, [Pair.makeFromList([DefineForm.make(), Symbol.make('plus'), Symbol.make('+')]), \
-            Pair.makeFromList([DefineForm.make(), Pair.makeFromList([Symbol.make('b'), Symbol.make('a')]),Pair.makeFromList([Symbol.make('plus'), Symbol.make('a'), Symbol.make('a')])])])
+        self.assertEqual(e, [Pair.makeFromList([Symbol.make('define'), Symbol.make('plus'), Symbol.make('+')]), \
+            Pair.makeFromList([Symbol.make('define'), Pair.makeFromList([Symbol.make('b'), Symbol.make('a')]),Pair.makeFromList([Symbol.make('plus'), Symbol.make('a'), Symbol.make('a')])])])
         
     def test_030_evalDefineAndLookup(self):
         e = self.tpe('(define a 1)')

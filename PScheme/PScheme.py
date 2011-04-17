@@ -266,7 +266,7 @@ class SExpression(object):
         return not (self == other)
         
     def __str__(self):
-        return '#<unknown-expression>'
+        return '#<unknown-expression 0x%x>' % id(self)
 
     def __repr__(self):
         return str(self)
@@ -942,7 +942,7 @@ class Continuation(Procedure):
         return Trampolined(operands.car)
     
     def __str__(self):
-        return '#<continuation>'
+        return '#<continuation 0x%x>' % id(self)
 
 class CompoundProcedure(Procedure):
     @classmethod
@@ -1002,7 +1002,7 @@ class CompoundProcedure(Procedure):
         return self.bind(self.formals, operands, callingForm, Frame(self.frame), step2)
     
     def __str__(self):
-        return '#<procedure '+ str(self.formals) + '>'
+        return '#<procedure %s 0x%x>' % (str(self.formals), id(self))
 
 class Trampolined(SExpression):
     @classmethod
@@ -1021,7 +1021,7 @@ class Trampolined(SExpression):
         return self.continuation(self.operand)
 
     def __str__(self):
-        return '#<trampolined value>'
+        return '#<trampolined (%) 0x%x>' % (str(self.operand), id(self))
 
 class SpecialSyntax(SExpression):
     object = None
@@ -1063,7 +1063,7 @@ class SpecialSyntax(SExpression):
         return True
         
     def __str__(self):
-        return '#<' + self.__class__.__name__ + '>'
+        return '#<%s>' % self.__class__.__name__
     
 class QuoteForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont = None):
@@ -1363,7 +1363,7 @@ class PrimitiveProcedure(Procedure):
         return cls.object
     
     def __str__(self):
-        return '#<' + self.__class__.__name__ + '>'
+        return '#<%s>' + self.__class__.__name__
     
 class IsNullProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):

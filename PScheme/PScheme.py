@@ -726,13 +726,13 @@ class Pair(SExpression):
     def parseTokens(cls, token, tokens, topLevel=False):
         try:
             #print token.text
-            improper = False
+            improper = 0
             error = False
             self = cls.make(Null.make(), Null.make())
             tail = self
             for t in tokens:
                 #print t.text
-                if not improper: # proper list (so far)
+                if improper == 0: # proper list (so far)
                     if t.text == '.':
                         if tail == self: #first element
                             error = True
@@ -750,14 +750,14 @@ class Pair(SExpression):
                     if t.text == '.': # more than 1 dot
                         error = True
                     elif t.text == ')':
-                        if error or tail.isPair(): #earlier error or 0 tokens after the dot
-                            print self
-                            raise ExpressionError(token, 'Wrong improper list format.')
+                        if error or improper != 2: #earlier error or wrong number of expressions after dot
+                            raise ExpressionError(token, 'Wrong pair format.')
                         self = self.cdr #discard empty car
                         self.meta = token.meta
                         self.topLevel = topLevel
                         return self
                     else:
+                        improper += 1
                         expr = SExpression.parseTokens(t, tokens)
                         if not tail.isPair(): # more than 1 token after the dot
                             error = True

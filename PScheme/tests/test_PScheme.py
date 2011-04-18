@@ -82,6 +82,26 @@ class PSchemeTest(unittest.TestCase):
         #    e.append(n.eval(f))
         self.assertEqual(e, [Pair.makeFromList([Symbol.make('define'), Symbol.make('plus'), Symbol.make('+')]), \
             Pair.makeFromList([Symbol.make('define'), Pair.makeFromList([Symbol.make('b'), Symbol.make('a')]),Pair.makeFromList([Symbol.make('plus'), Symbol.make('a'), Symbol.make('a')])])])
+
+    def test_parseList(self):
+        self.assertEqual(self.tpes("'()"), ["()"])
+        self.assertEqual(self.tpes("'(1)"), ["(1)"])
+        self.assertEqual(self.tpes("'(1 2)"), ["(1 2)"])
+        self.assertEqual(self.tpes("'(1 2 . ())"), ["(1 2)"])
+        self.assertEqual(self.tpes("'(1 . 2)"), ["(1 . 2)"])
+        self.assertEqual(type(self.tpe("'(1 2 . )")[0]), Error)
+        self.assertEqual(type(self.tpe("'(1 2 .)")[0]), Error)
+        self.assertEqual(type(self.tpe("'(. 1)")[0]), Error)
+        self.assertEqual(type(self.tpe("'( . 1)")[0]), Error)
+        self.assertEqual(type(self.tpe("'( . )")[0]), Error)
+        self.assertEqual(type(self.tpe("'(1 . 2 3)")[0]), Error)
+        self.assertEqual(type(self.tpe("'(1 .a)")[0]), Error)
+        self.assertEqual(self.tpes("'(1 2 . (+ 1 2))"), ["(1 2 + 1 2)"])
+        self.assertEqual(self.tpes("'(1 2 (+ 1 2))"), ["(1 2 (+ 1 2))"])
+        self.assertEqual(self.tpes("`(1 2 . ,(+ 1 2))"), ["(1 2 . 3)"])
+        self.assertEqual(self.tpes("`(1 2 ,(+ 1 2))"), ["(1 2 3)"])
+        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) 3)")[0]), Error) # could work but made illegal
+        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) . 3)")[0]), Error) # could work but made illegal
         
     def test_030_evalDefineAndLookup(self):
         e = self.tpe('(define a 1)')

@@ -160,8 +160,8 @@ class PSchemeTest(unittest.TestCase):
         prog = """
 (define (identity x) x)
         """
-        self.assertEqual(self.tpes("(call/cc identity)"), ['#<continuation>'])
-        self.assertEqual(self.tpes("(call-with-current-continuation identity)"), ['#<continuation>'])
+        self.assertEqual(type(self.tpe("(call/cc identity)")[0]), Continuation)
+        self.assertEqual(type(self.tpe("(call-with-current-continuation identity)")[0]), Continuation)
         
         
     def test_procedures(self):

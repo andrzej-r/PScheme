@@ -45,31 +45,6 @@ from copy import copy
 # flags for the parser
 flags = re.UNICODE
 
-class ExpressionError(Exception):
-    """
-    Exception class representing Scheme Expression parsing or evaluation error.
-    """
-    def __init__(self, expr, msg=''):
-        "``expr`` can be either SExpression or Token. It must contain ``meta`` attribute."
-        self.expr = expr
-        self.msg = msg
-        
-    #def __str__(self):
-    #    return unicode(self)
-        
-    def __str__(self):
-        if not 'meta' in self.expr.__dict__:
-            return 'Error: ' + self.msg
-        fileName = self.expr.meta['fileName']
-        line = self.expr.meta['line'].rstrip()
-        lineNo = str(self.expr.meta['lineNo'])
-        start = self.expr.meta['colStart']
-        span = self.expr.meta['colEnd'] - start
-        return ' Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
-        
-    def __repr__(self):
-        return '<Expression Error ' + self.msg + '>'
-
 class Token(object):
     """
     Class for representing a token of a Scheme source code. In addition to that it also
@@ -587,6 +562,31 @@ class Boolean(SelfEval):
         #return (other is self) or (type(other) == type(self) and other.value == self.value) or (type(other) != type(self) and self.value)
         #return (other is self) or (other.value == self.value) or (not other.isBoolean() and self.value)
         
+class ExpressionError(Exception):
+    """
+    Exception class representing Scheme Expression parsing or evaluation error.
+    """
+    def __init__(self, expr, msg=''):
+        "``expr`` can be either SExpression or Token. It must contain ``meta`` attribute."
+        self.expr = expr
+        self.msg = msg
+        
+    #def __str__(self):
+    #    return unicode(self)
+        
+    def __str__(self):
+        if not 'meta' in self.expr.__dict__:
+            return 'Error: ' + self.msg
+        fileName = self.expr.meta['fileName']
+        line = self.expr.meta['line'].rstrip()
+        lineNo = str(self.expr.meta['lineNo'])
+        start = self.expr.meta['colStart']
+        span = self.expr.meta['colEnd'] - start
+        return ' Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
+        
+    def __repr__(self):
+        return '<Expression Error ' + self.msg + '>'
+
 class Symbol(SExpression):
     cache = {}
     

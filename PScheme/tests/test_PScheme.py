@@ -70,7 +70,7 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(e, [String.make('asd',), String.make('asd\\"dsa')])
         #self.assertRaises(ExpressionError, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string, changed error handling
         e = self.tp('"asd" "asd\\"dsa""123')
-        self.assertEqual(list(map(type, e)), [String, String, Error])
+        self.assertEqual(list(map(type, e)), [String, String, ExpressionError])
         e = self.tp('#t #f')
         self.assertEqual(e, [Boolean.make(True), Boolean.make(False)])
         self.assertEqual(list(map(type, e)), [Boolean, Boolean])
@@ -89,19 +89,19 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("'(1 2)"), ["(1 2)"])
         self.assertEqual(self.tpes("'(1 2 . ())"), ["(1 2)"])
         self.assertEqual(self.tpes("'(1 . 2)"), ["(1 . 2)"])
-        self.assertEqual(type(self.tpe("'(1 2 . )")[0]), Error)
-        self.assertEqual(type(self.tpe("'(1 2 .)")[0]), Error)
-        self.assertEqual(type(self.tpe("'(. 1)")[0]), Error)
-        self.assertEqual(type(self.tpe("'( . 1)")[0]), Error)
-        self.assertEqual(type(self.tpe("'( . )")[0]), Error)
-        self.assertEqual(type(self.tpe("'(1 . 2 3)")[0]), Error)
-        self.assertEqual(type(self.tpe("'(1 .a)")[0]), Error)
+        self.assertEqual(type(self.tpe("'(1 2 . )")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'(1 2 .)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'(. 1)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'( . 1)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'( . )")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'(1 . 2 3)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'(1 .a)")[0]), ExpressionError)
         self.assertEqual(self.tpes("'(1 2 . (+ 1 2))"), ["(1 2 + 1 2)"])
         self.assertEqual(self.tpes("'(1 2 (+ 1 2))"), ["(1 2 (+ 1 2))"])
         self.assertEqual(self.tpes("`(1 2 . ,(+ 1 2))"), ["(1 2 . 3)"])
         self.assertEqual(self.tpes("`(1 2 ,(+ 1 2))"), ["(1 2 3)"])
-        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) 3)")[0]), Error) # could work but made illegal
-        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) . 3)")[0]), Error) # could work but made illegal
+        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) 3)")[0]), ExpressionError) # could work but made illegal
+        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) . 3)")[0]), ExpressionError) # could work but made illegal
         
     def test_030_evalDefineAndLookup(self):
         e = self.tpe('(define a 1)')
@@ -114,7 +114,7 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(e, [Nil.make()])
         self.assertTrue(isinstance(self.frame.symbols['b'], CompoundProcedure))
         self.assertTrue(isinstance(self.tpe('b')[0], CompoundProcedure))
-        self.assertTrue(isinstance(self.tpe('a')[0], Error))
+        self.assertTrue(isinstance(self.tpe('a')[0], ExpressionError))
 
         self.assertEqual(self.tpe('(b 3)'), [Number.make(6)])
 

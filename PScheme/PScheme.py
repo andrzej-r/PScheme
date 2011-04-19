@@ -140,7 +140,7 @@ class Frame(object):
             try:
                 yield SExpression.parseTokens(token, tokens, topLevel=True)
             except ExpressionError as e:
-                yield Error.make(e)
+                yield e
             
     def resolveSymbol(self, symbol):
         if symbol.name in self.symbols:
@@ -177,9 +177,9 @@ class Frame(object):
                     result = result.eval(self, processResult)
                 yield result
             except ExpressionError as e:
-                yield Error.make(e)
+                yield e
             except RuntimeError:
-                yield Error.make('Error: maximum stack depth exceeded')
+                yield ExpressionError(expression, 'maximum stack depth exceeded')
 
 class SExpression(object):
     pnumber = re.compile(r'^' + Tokenizer.number + r'$', flags)
@@ -562,7 +562,7 @@ class Boolean(SelfEval):
         #return (other is self) or (type(other) == type(self) and other.value == self.value) or (type(other) != type(self) and self.value)
         #return (other is self) or (other.value == self.value) or (not other.isBoolean() and self.value)
         
-class ExpressionError(Exception):
+class ExpressionError(Exception, SelfEval):
     """
     Exception class representing Scheme Expression parsing or evaluation error.
     """
@@ -582,10 +582,10 @@ class ExpressionError(Exception):
         lineNo = str(self.expr.meta['lineNo'])
         start = self.expr.meta['colStart']
         span = self.expr.meta['colEnd'] - start
-        return ' Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
+        return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
         
     def __repr__(self):
-        return '<Expression Error ' + self.msg + '>'
+        return '<ExpressionError ' + self.msg + '>'
 
 class Symbol(SExpression):
     cache = {}
@@ -623,25 +623,6 @@ class Symbol(SExpression):
 
     def __eq__(self, other):
         return (other is self) # not needed because of chaching # or (type(other) == type(self) and other.name == self.name)
-
-class Error(SExpression):
-    """
-    A 'placeholder' expression serving only as a storage for errors that occurred during at
-    the token parsing stage.
-    """
-    
-    @classmethod
-    def make(cls, exception):
-        self = cls()
-        self.exception = exception
-        return self
-    
-    def eval(self, frame, cont):
-        return Trampolined.make(cont, self)
-        #raise self.exception
-
-    def __str__(self):
-        return str(self.exception)
 
 class Null(SExpression):
     cache = None

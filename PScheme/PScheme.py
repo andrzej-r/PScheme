@@ -684,7 +684,8 @@ class Pair(SExpression):
         self = cls()
         self.car = car
         self.cdr = cdr
-        self.quasiquoted = False
+        self.quasiquoteLevel = 0
+        self.unquoteSplice = False
         return self
     
     @classmethod
@@ -1054,14 +1055,7 @@ class QuoteForm(SpecialSyntax):
         res = operands.car
         return Trampolined.make(cont, res)
 
-class QuasiQuoteForm(SpecialSyntax):
-    def apply(self, operands, callingForm, frame, cont = None):
-        if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"quasiquote" requires 1 operand, ' + str(len(operands)) + ' given.')
-        def step2(expr):
-            return Trampolined.make(cont, expr)
-        return self.processExpression(operands.car, callingForm, frame, step2)
-
+class QuotedForm(SpecialSyntax):
     def processExpression(self, expr, callingForm, frame, cont):
         def unsplice(lst, cont):
             def step2(cdr):
@@ -1076,37 +1070,73 @@ class QuasiQuoteForm(SpecialSyntax):
             def step2(car):
                 def step3(cdr):
                     return Trampolined.make(cont, Pair.make(car, cdr))
-                return self.processExpression(expr.cdr, callingForm, frame, step3)
-            expr.quasiquoted = True
+                if car.isPair() and car.unquoteSplice:
+                    return unsplice(car.car, cont) #Trampolined.make(cont, Nil.make())
+                else:
+                    return self.processExpression(expr.cdr, callingForm, frame, step3)
+            expr.quasiquoteLevel = callingForm.quasiquoteLevel
+            if expr.car.isSymbol() and expr.car.name == 'quasiquote':
+                return expr.eval(frame, cont)
             if expr.car.isSymbol() and expr.car.name == 'unquote':
-                    return expr.eval(frame, cont)
-            if expr.car.isPair() and expr.car.car.isSymbol() and expr.car.car.name == 'unquote-splicing':
-                def ustep2(lst):
-                    if not lst.isNull() and not lst.isPair():
-                        raise ExpressionError(callingForm, '"unquote-splicing": operand is not a list.')
-                    return unsplice(lst, cont)
-                expr.car.quasiquoted = True
-                return expr.car.eval(frame, ustep2)
+                return expr.eval(frame, cont)
+            if expr.car.isSymbol() and expr.car.name == 'unquote-splicing':
+                return expr.eval(frame, cont)
             return self.processExpression(expr.car, callingForm, frame, step2)
-        
-            
-class UnQuoteForm(SpecialSyntax):
-    def apply(self, operands, callingForm, frame, cont):
-        if callingForm.quasiquoted:
-            if operands.isNull() or operands.cdr.isPair():
-                raise ExpressionError(callingForm, '"unquote" requires 1 operand, ' + str(len(operands)) + ' given.')
-            return operands.car.eval(frame, cont)
-        else:
-            raise ExpressionError(callingForm, '"unquote" outside of "quasiquote".')
 
-class UnQuoteSplicingForm(SpecialSyntax):
+class QuasiQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont = None):
-        if callingForm.quasiquoted:
-            if operands.isNull() or operands.cdr.isPair():
-                raise ExpressionError(callingForm, '"unquote-splicing" requires 1 operand, ' + str(len(operands)) + ' given.')
+        def step2(expr):
+            if callingForm.quasiquoteLevel == 1:
+                return Trampolined.make(cont, expr)
+            else:
+                form = Pair.makeFromList([Symbol.make("quasiquote"), expr])
+                form.meta = callingForm.meta
+                form.quasiquoteLevel = callingForm.quasiquoteLevel
+                return Trampolined.make(cont, form)
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"quasiquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+        callingForm.quasiquoteLevel += 1
+        return self.processExpression(operands.car, callingForm, frame, step2)
+            
+class UnQuoteForm(QuotedForm):
+    def apply(self, operands, callingForm, frame, cont):
+        def step2(expr):
+            form = Pair.makeFromList([Symbol.make("unquote"), expr])
+            form.meta = callingForm.meta
+            form.quasiquoteLevel = callingForm.quasiquoteLevel
+            return Trampolined.make(cont, form)
+        callingForm.quasiquoteLevel -= 1
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"unquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+        if callingForm.quasiquoteLevel < 0:
+            raise ExpressionError(callingForm, '"unquote" outside of "quasiquote".')
+        if callingForm.quasiquoteLevel == 0:
             return operands.car.eval(frame, cont)
         else:
+            return self.processExpression(operands.car, callingForm, frame, step2)
+
+class UnQuoteSplicingForm(QuotedForm):
+    def apply(self, operands, callingForm, frame, cont = None):
+        def evaluated(res):
+            if not res.isPair() and not res.isNull():
+                raise ExpressionError(callingForm, 'result of "unquote-splicing" is not a list.')
+            res = Pair.make(res, Null.make()) # wrap it with a pair because we must set 'unquoteSplice' and Null is immutable
+            res.unquoteSplice = True
+            return Trampolined.make(cont, res)
+        def expanded(expr):
+            form = Pair.makeFromList([Symbol.make("unquote-splicing"), expr])
+            form.meta = callingForm.meta
+            form.quasiquoteLevel = callingForm.quasiquoteLevel
+            return Trampolined.make(cont, form)
+        callingForm.quasiquoteLevel -= 1
+        if operands.isNull() or operands.cdr.isPair():
+            raise ExpressionError(callingForm, '"unquote-splicing" requires 1 operand, ' + str(len(operands)) + ' given.')
+        if callingForm.quasiquoteLevel < 0:
             raise ExpressionError(callingForm, '"unquote-splicing" outside of "quasiquote".')
+        if callingForm.quasiquoteLevel == 0:
+            return operands.car.eval(frame, evaluated)
+        else:
+            return self.processExpression(operands.car, callingForm, frame, expanded)
 
 class DefineForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):

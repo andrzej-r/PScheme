@@ -266,18 +266,28 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("`(list ,(+ 1 2) 4)"), ['(list 3 4)'])
         self.assertEqual(self.tpes("(let ((name 'a)) `(list ,name ',name))"), ["(list a 'a)"]) #'(list a (quote a))'
         self.assertEqual(self.tpes("`(a ,(+ 1 2) ,@(map abs '(4 -5 6)) b)"), ['(a 3 4 5 6 b)'])
-        #self.assertEqual(self.tpes("`(( foo ,(- 10 3)) ,@(cdr '(c)) . ,(car '(cons)))"), ['((foo 7) . cons)'])
+        self.assertEqual(self.tpes("`(( foo ,(- 10 3)) ,@(cdr '(c)) . ,(car '(cons)))"), ['((foo 7) . cons)'])
         #self.assertEqual(self.tpes("`#(10 5 ,(sqrt 4) ,@(map sqrt '(16 9)) 8)"), ['#(10 5 2 4 3 8)'])
 
-        #self.assertEqual(self.tpes("`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)"), ["(a `(b ,(+ 1 2) ,(foo 4 d) e) f)"])
+        self.assertEqual(self.tpes("`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)"), ["(a `(b ,(+ 1 2) ,(foo 4 d) e) f)"])
         s = """
 (let ((name1 'x)
       (name2 'y))
   `(a `(b ,,name1 ,',name2 d) e))           
         """
-        #self.assertEqual(self.tpes(s), ["(a `(b ,x ,'y d) e)"])
+        self.assertEqual(self.tpes(s), ["(a `(b ,x ,'y d) e)"])
         self.assertEqual(self.tpes("(quasiquote (list (unquote (+ 1 2)) 4))"), ["(list 3 4)"])
         self.assertEqual(self.tpes("'(quasiquote (list (unquote (+ 1 2)) 4))"), ["`(list ,(+ 1 2) 4)"]) #(quasiquote (list (unquote (+ 1 2)) 4))
+
+        # http://bugs.call-cc.org/ticket/439
+        self.assertEqual(type(self.tpe("(let ((a 1)) (quasiquote (unquote a b)))")[0]), ExpressionError)
+        self.assertEqual(self.tpes("(quasiquote (quasiquote (unquote-splicing (unquote (list 1 2)))))"), ["`,@(1 2)"])  #"`,@,x"
+        s = """
+(define x (list 1 2))
+;(quasiquote (quasiquote (unquote (unquote x))))
+(quasiquote (quasiquote (unquote-splicing (unquote x))))
+        """
+        self.assertEqual(self.tpes(s)[1], "`,@(1 2)")  #"`,@,x"
         
     def test_eqv(self):
         "from R5RS 6.1"

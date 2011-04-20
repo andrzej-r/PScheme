@@ -1086,6 +1086,8 @@ class QuotedForm(SpecialSyntax):
 class QuasiQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont = None):
         def step2(expr):
+            if expr.isPair() and expr.unquoteSplice:
+                raise ExpressionError(callingForm, '"unquote-splicing" should not expand directly in "quasiquote".')
             if callingForm.quasiquoteLevel == 1:
                 return Trampolined.make(cont, expr)
             else:
@@ -1101,6 +1103,8 @@ class QuasiQuoteForm(QuotedForm):
 class UnQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont):
         def step2(expr):
+            if expr.isPair() and expr.unquoteSplice:
+                raise ExpressionError(callingForm, '"unquote-splicing" should not expand directly in "unquote".')
             form = Pair.makeFromList([Symbol.make("unquote"), expr])
             form.meta = callingForm.meta
             form.quasiquoteLevel = callingForm.quasiquoteLevel
@@ -1124,6 +1128,8 @@ class UnQuoteSplicingForm(QuotedForm):
             res.unquoteSplice = True
             return Trampolined.make(cont, res)
         def expanded(expr):
+            if expr.isPair() and expr.unquoteSplice:
+                raise ExpressionError(callingForm, '"unquote-splicing" should not expand directly in "unquote-splicing".')
             form = Pair.makeFromList([Symbol.make("unquote-splicing"), expr])
             form.meta = callingForm.meta
             form.quasiquoteLevel = callingForm.quasiquoteLevel

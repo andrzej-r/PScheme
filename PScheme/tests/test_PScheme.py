@@ -281,7 +281,6 @@ class PSchemeTest(unittest.TestCase):
 
         # http://bugs.call-cc.org/ticket/439
         self.assertEqual(type(self.tpe("(let ((a 1)) (quasiquote (unquote a b)))")[0]), ExpressionError)
-        self.assertEqual(self.tpes("(quasiquote (quasiquote (unquote-splicing (unquote (list 1 2)))))"), ["`,@(1 2)"])  #"`,@,x"
         s = """
 (define x (list 1 2))
 ;(quasiquote (quasiquote (unquote (unquote x))))
@@ -289,6 +288,24 @@ class PSchemeTest(unittest.TestCase):
         """
         self.assertEqual(self.tpes(s)[1], "`,@(1 2)")  #"`,@,x"
         
+        self.assertEqual(self.tpes("(quasiquote (quasiquote (unquote-splicing (unquote (list 1 2)))))"), ["`,@(1 2)"])  #"`,@,x"
+        self.assertEqual(type(self.tpe("`,@(+ 1 2)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("(quasiquote)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("(quasiquote 1 2)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`(unquote)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`(unquote 1 2)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`(unquote-splicing)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`(unquote-splicing 1 2)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("```,,,,1 ")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("```,@,@,@,@'()")[0]), ExpressionError)
+        self.assertEqual(self.tpes("`(,@'())"), ["()"])
+        self.assertEqual(type(self.tpe("`,@'()")[0]), ExpressionError)
+        self.assertEqual(self.tpes("```(,@,@'())"), ["``(,@,@'())"])
+        self.assertEqual(type(self.tpe("```(,@,@,@'())")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("```(,,,@'())")[0]), ExpressionError)
+        self.assertEqual(self.tpes("```,,,1"), ["``,,1"])
+
     def test_eqv(self):
         "from R5RS 6.1"
         self.assertEqual(self.tpes("(eqv? 'a 'a)"), ['#t'])

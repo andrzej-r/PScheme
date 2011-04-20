@@ -118,10 +118,11 @@ class Tokenizer(object):
         Tokenizes a list of lines.
         @lines can be any iterable object, including a generator object (a file, interactive console)
         """
-        #print (self.tokenizeLine(line) for line in lines)
         return self.chain(self.tokenizeLine(line) for line in lines)
-        #return self.chain([self.tokenizeLine(line) for line in lines])
                 
+    def tokenizeText(self, txt):
+        return self.tokenizeLines(txt.splitlines())
+
 class Frame(object):
     def __init__(self, parentFrame=None):
         self.parentFrame = parentFrame

@@ -23,21 +23,21 @@ class PSchemeTest(unittest.TestCase):
     def tearDown(self):
         pass
         
-    def t(self, line):
+    def t(self, txt):
         "Tokenize"
-        return list(self.tokenizer.tokenizeLine(line))
+        return list(self.tokenizer.tokenizeText(txt))
         
-    def tp(self, line):
+    def tp(self, txt):
         "Tokenize+Parse"
-        return list(self.frame.parseTokens(self.tokenizer.tokenizeLine(line)))
+        return list(self.frame.parseTokens(self.tokenizer.tokenizeText(txt)))
         
-    def tpe(self, line):
+    def tpe(self, txt):
         "Tokenize+Parse+Evaluate"
-        return list(self.frame.evaluateExpressions(self.frame.parseTokens(self.tokenizer.tokenizeLine(line))))
+        return list(self.frame.evaluateExpressions(self.frame.parseTokens(self.tokenizer.tokenizeText(txt))))
         
-    def tpes(self, line):
+    def tpes(self, txt):
         "Tokenize+Parse+Evaluate+String"
-        return self.s(self.frame.evaluateExpressions(self.frame.parseTokens(self.tokenizer.tokenizeLine(line))))
+        return self.s(self.frame.evaluateExpressions(self.frame.parseTokens(self.tokenizer.tokenizeText(txt))))
         
     def s(self, lst):
         "convert a list of objects into a list of strings"

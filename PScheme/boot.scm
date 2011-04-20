@@ -72,7 +72,7 @@
 (define (cdddar l) (cdddr (car l)))
 (define (cddddr l) (cdddr (cdr l)))
 
-(define ( newline) (write-char #\newline))
+(define (newline) (write-char #\newline))
 
 (define (fac n)
     (if (= n 1)
@@ -83,6 +83,15 @@
     (cond ((= n 0) 0)
 	  ((= n 1) 1)
 	  (else (+ (fib (- n 1)) (fib (- n 2))))))
+
+(define (fib-iter n)
+  (define (helper acc1 acc2 idx)
+    (if (= idx n)
+	acc1
+	(helper (+ acc1 acc2) acc1 (+ idx 1))))
+  (if (zero? n)
+      0
+      (helper 1 0 1)))
 
 (define zero (- 1 1))
 (define one (+ zero 1))

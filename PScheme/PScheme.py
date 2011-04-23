@@ -1727,7 +1727,7 @@ class Frame(SExpression):
         
     def evaluateExpressions(self, expressions):
         for expression in expressions:
-            #print expression
+            #print(expression)
             try:
                 def processResult(result):
                     return result
@@ -1741,6 +1741,9 @@ class Frame(SExpression):
                 yield ErrorExpression.make(e)
             except RuntimeError:
                 yield ErrorExpression.make(SchemeError(expression, 'maximum stack depth exceeded'))
+
+    def __str__(self):
+        return '#<env-frame 0x%x>' % id(self)
 
 class Parser(object):
     def __init__(self, fileName):
@@ -1798,3 +1801,44 @@ class Parser(object):
             except SchemeError as e:
                 yield ErrorExpression.make(e)
             
+
+if __name__ == "__main__":
+    def t(txt):
+        "Tokenize"
+        return list(parser.tokenizeText(txt))
+        
+    def tp(txt):
+        "Tokenize+Parse"
+        return list(parser.parseTokens(t(txt)))
+
+    def e(expressions):
+        "Evaluate"
+        return list(frame.evaluateExpressions(expressions))
+                
+    def tpe(txt):
+        "Tokenize+Parse+Evaluate"
+        return e(tp(txt))
+        
+    def tpes(txt):
+        "Tokenize+Parse+Evaluate+String"
+        return s(tpe(txt))
+        
+    def s(lst):
+        "convert a list of objects into a list of strings"
+        return [str(element) for element in lst]
+
+    def flush(generator):
+        for element in generator: pass
+            
+    import os
+    frame = Frame()
+    fname = os.path.join(os.path.dirname(__file__), 'boot.scm')
+    parser = Parser(fname)
+    with open(fname, 'r') as f:
+        tokens = parser.tokenizeLines(f)
+        expressions = parser.parseTokens(tokens)
+        results = frame.evaluateExpressions(expressions) #result generator
+        flush(results) # check results to force delayed execution
+
+    parser = Parser('cmd')
+    

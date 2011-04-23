@@ -11,33 +11,33 @@ class PSchemeTest(unittest.TestCase):
         self.frame = Frame()
         
         fname = os.path.join(os.path.dirname(__file__), '../boot.scm')
-        tokenizer = Tokenizer(fname)
+        parser = Parser(fname)
         with open(fname, 'r') as f:
-            tokens = tokenizer.tokenizeLines(f)
-            expressions = self.frame.parseTokens(tokens)
+            tokens = parser.tokenizeLines(f)
+            expressions = parser.parseTokens(tokens)
             results = self.frame.evaluateExpressions(expressions) #result generator
             flush(results) # check results to force delayed execution
 
-        self.tokenizer = Tokenizer('tests')
+        self.parser = Parser('tests')
         
     def tearDown(self):
         pass
         
     def t(self, txt):
         "Tokenize"
-        return list(self.tokenizer.tokenizeText(txt))
+        return list(self.parser.tokenizeText(txt))
         
     def tp(self, txt):
         "Tokenize+Parse"
-        return list(self.frame.parseTokens(self.tokenizer.tokenizeText(txt)))
+        return list(self.parser.parseTokens(self.parser.tokenizeText(txt)))
         
     def tpe(self, txt):
         "Tokenize+Parse+Evaluate"
-        return list(self.frame.evaluateExpressions(self.frame.parseTokens(self.tokenizer.tokenizeText(txt))))
+        return list(self.frame.evaluateExpressions(self.parser.parseTokens(self.parser.tokenizeText(txt))))
         
     def tpes(self, txt):
         "Tokenize+Parse+Evaluate+String"
-        return self.s(self.frame.evaluateExpressions(self.frame.parseTokens(self.tokenizer.tokenizeText(txt))))
+        return self.s(self.frame.evaluateExpressions(self.parser.parseTokens(self.parser.tokenizeText(txt))))
         
     def s(self, lst):
         "convert a list of objects into a list of strings"

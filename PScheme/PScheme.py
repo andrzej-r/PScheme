@@ -45,6 +45,30 @@ from copy import copy
 # flags for the parser
 flags = re.UNICODE
 
+comment = r'(?:;.*$)'
+lparen = r'(?:\()'
+rparen = r'(?:\))'
+number = r'(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)'
+symbol = r'(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~\d+-.@]*)|\+|\-|\.\.\.)'
+string = r'(?:\"(?:\\"|[^"])*?\")'
+brokenstring = r'(?:\"(?:\\"|[^"])*$)'
+char = r'(?:#\\\S\w*)'
+boolean = r'(?:#(?:t|f))'
+quote = r'(?:\')'
+quasiquote = r'(?:\`)'
+unquote_splicing = r'(?:\,@)'
+unquote = r'(?:\,)'
+other = r'(?:\S+)'
+
+tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote + '|' + quasiquote + '|' + unquote_splicing + '|' + unquote + '|' + other
+    
+ptokens = re.compile(tokens, flags)
+#ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
+#ptokens = re.compile(ur'\(|\)|(?:[\w+\-*/<>=!?.]+)|(?:#(?:t|f))|\'', flags)
+#ptokens = re.compile(ur'\(|\)', flags)
+
+
+class SchemeError(Exception):
 class Token(object):
     """
     Class for representing a token of a Scheme source code. In addition to that it also
@@ -60,135 +84,14 @@ class Token(object):
     def __repr__(self):
         return '<Token ' + str(self) + '>'
         
-class Tokenizer(object):
-    comment = r'(?:;.*$)'
-    lparen = r'(?:\()'
-    rparen = r'(?:\))'
-    number = r'(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)'
-    symbol = r'(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~\d+-.@]*)|\+|\-|\.\.\.)'
-    string = r'(?:\"(?:\\"|[^"])*?\")'
-    brokenstring = r'(?:\"(?:\\"|[^"])*$)'
-    char = r'(?:#\\\S\w*)'
-    boolean = r'(?:#(?:t|f))'
-    quote = r'(?:\')'
-    quasiquote = r'(?:\`)'
-    unquote_splicing = r'(?:\,@)'
-    unquote = r'(?:\,)'
-    other = r'(?:\S+)'
-    
-    tokens = comment + '|' + lparen + '|' + rparen + '|' + number + '|' + symbol + '|' + string + '|' + brokenstring + '|' + char + '|' + boolean + '|' + quote + '|' + quasiquote + '|' + unquote_splicing + '|' + unquote + '|' + other
-    
-    ptokens = re.compile(tokens, flags)
-    #ptokens = re.compile(ur';.*$|\(|\)|(?:[+\-]?(?:(?:[0-9]+\.?[0-9]*)|(?:[0-9]*\.?[0-9]+))(?:e[+\-]?[0-9]+)?)|(?:(?:[a-zA-Z!$%&*/:<=>?^_~][a-zA-Z0-9!$%&*/:<=>?^_~+\-.@]*)|\+|\-|\.\.\.)|(?:\"(?:\\"|[^"])*?\")|(?:#\\\S\w*)|(?:#(?:t|f))|\'|\".*$', flags)
-    #ptokens = re.compile(ur'\(|\)|(?:[\w+\-*/<>=!?.]+)|(?:#(?:t|f))|\'', flags)
-    #ptokens = re.compile(ur'\(|\)', flags)
-
-    def __init__(self, fileName):
-        self.lineNo = 0
-        self.fileName = fileName
-    
-    def tokenizeLine(self, line):
-        """
-        Tokenizes a single text line.
-        @line line of text (string)
-        """
-        #print line
-        line = line.expandtabs()
-        self.lineNo += 1
-        for token_match in self.ptokens.finditer(line): #.decode('utf8')):
-            if not token_match.group().startswith(';'):
-                meta = {}
-                meta['fileName'] = self.fileName
-                meta['line'] = token_match.string
-                meta['lineNo'] = self.lineNo
-                meta['colStart'] = token_match.start()+1
-                meta['colEnd'] = token_match.end()+1
-                token = Token(token_match.group(), meta)
-                #print token.text
-                yield token
-
-    def chain(self, iterables):
-        # chain(['ABC', 'DEF']) --> A B C D E F
-        for it in iterables:
-            for element in it:
-                yield element
-    
-    def tokenizeLines(self, lines):
-        """
-        Tokenizes a list of lines.
-        @lines can be any iterable object, including a generator object (a file, interactive console)
-        """
-        return self.chain(self.tokenizeLine(line) for line in lines)
-                
-    def tokenizeText(self, txt):
-        return self.tokenizeLines(txt.splitlines())
-
-class Frame(object):
-    def __init__(self, parentFrame=None):
-        self.parentFrame = parentFrame
-        self.symbols = {}
-                
-    def read(self, text, tokenizer):
-        lines = text.splitlines()
-        return self.readLines(lines, tokenizer)
-    
-    def readLines(self, lines, tokenizer):
-        tokens = tokenizer.tokenizeLines(lines)
-        return self.parseTokens(tokens)
-    
-    def parseTokens(self, tokens):
-        for token in tokens:
-            try:
-                yield SExpression.parseTokens(token, tokens, topLevel=True)
-            except ExpressionError as e:
-                yield e
-            
-    def resolveSymbol(self, symbol):
-        if symbol.name in self.symbols:
-            return self.symbols[symbol.name]
-        elif self.parentFrame:
-            return self.parentFrame.resolveSymbol(symbol)
-        elif symbol.name in PrimitiveProcedure.primitiveFunctions:
-            return PrimitiveProcedure.primitiveFunctions[symbol.name]()
-            #return symbol
-        else:
-            raise ExpressionError(symbol, 'Undefined symbol "' + symbol.name + '"')
-
-    def resolveSymbolLocation(self, symbol):
-        if symbol.name in self.symbols:
-            return self.symbols
-        elif self.parentFrame:
-            return self.parentFrame.resolveSymbolLocation(symbol)
-        else:
-            return None
-        
-    def addSymbol(self, symbol, value):
-        self.symbols[symbol.name] = value
-        
-    def evaluateExpressions(self, expressions):
-        for expression in expressions:
-            #print expression
-            try:
-                def processResult(result):
-                    return result
-                result = expression.eval(self, processResult)
-                while result.isTrampolined():
-                    #print(result.operand)
-                    #print(result)
-                    result = result.eval(self, processResult)
-                yield result
-            except ExpressionError as e:
-                yield e
-            except RuntimeError:
-                yield ExpressionError(expression, 'maximum stack depth exceeded')
-
 class SExpression(object):
-    pnumber = re.compile(r'^' + Tokenizer.number + r'$', flags)
-    pstring = re.compile(r'^' + Tokenizer.string + r'$', flags)
-    pbrokenstring = re.compile(r'^' + Tokenizer.brokenstring, flags)
-    pchar = re.compile(r'^' + Tokenizer.char + r'$', flags)
-    pboolean = re.compile(r'^' + Tokenizer.boolean + r'$', flags)
-    psymbol = re.compile(r'^' + Tokenizer.symbol + r'$', flags)
+    __slots__ = []
+    pnumber = re.compile(r'^' + number + r'$', flags)
+    pstring = re.compile(r'^' + string + r'$', flags)
+    pbrokenstring = re.compile(r'^' + brokenstring, flags)
+    pchar = re.compile(r'^' + char + r'$', flags)
+    pboolean = re.compile(r'^' + boolean + r'$', flags)
+    psymbol = re.compile(r'^' + symbol + r'$', flags)
  
     @classmethod
     def parseTokens(cls, token, tokens, topLevel=False):
@@ -1768,3 +1671,105 @@ class CallCCProcedure(PrimitiveProcedure):
             raise ExpressionError(callingForm, '"call/cc": operand must be a procedure.')
         continuation = Continuation.make(cont)
         return operands.car.apply(Pair.makeFromList([continuation]), callingForm, cont)
+
+
+class Frame(SExpression):
+    __slots__ = ['parentFrame', 'symbols']
+    def __init__(self, parentFrame=None):
+        self.parentFrame = parentFrame
+        self.symbols = {}
+                
+    def resolveSymbol(self, symbol):
+        if symbol.name in self.symbols:
+            return self.symbols[symbol.name]
+        elif self.parentFrame:
+            return self.parentFrame.resolveSymbol(symbol)
+        elif symbol.name in PrimitiveProcedure.primitiveFunctions:
+            return PrimitiveProcedure.primitiveFunctions[symbol.name]()
+            #return symbol
+        else:
+            raise SchemeError(symbol, 'Undefined symbol "' + symbol.name + '"')
+
+    def resolveSymbolLocation(self, symbol):
+        if symbol.name in self.symbols:
+            return self.symbols
+        elif self.parentFrame:
+            return self.parentFrame.resolveSymbolLocation(symbol)
+        else:
+            return None
+        
+    def addSymbol(self, symbol, value):
+        self.symbols[symbol.name] = value
+        
+    def evaluateExpressions(self, expressions):
+        for expression in expressions:
+            #print expression
+            try:
+                def processResult(result):
+                    return result
+                result = expression.eval(self, processResult)
+                while result.isTrampolined():
+                    #print(result.operand)
+                    #print(result)
+                    result = result.eval(self, processResult)
+                yield result
+            except SchemeError as e:
+                yield ErrorExpression.make(e)
+            except RuntimeError:
+                yield ErrorExpression.make(SchemeError(expression, 'maximum stack depth exceeded'))
+
+class Parser(object):
+    def __init__(self, fileName):
+        self.lineNo = 0
+        self.fileName = fileName
+    
+    def tokenizeLine(self, line):
+        """
+        Tokenizes a single text line.
+        @line line of text (string)
+        """
+        #print line
+        line = line.expandtabs()
+        self.lineNo += 1
+        for token_match in ptokens.finditer(line): #.decode('utf8')):
+            if not token_match.group().startswith(';'):
+                meta = {}
+                meta['fileName'] = self.fileName
+                meta['line'] = token_match.string
+                meta['lineNo'] = self.lineNo
+                meta['colStart'] = token_match.start()+1
+                meta['colEnd'] = token_match.end()+1
+                token = Token(token_match.group(), meta)
+                #print token.text
+                yield token
+
+    def tokenizeLines(self, lines):
+        """
+        Tokenizes a list of lines.
+        @lines can be any iterable object, including a generator object (a file, interactive console)
+        """
+        def chain(iterables):
+            # chain(['ABC', 'DEF']) --> A B C D E F
+            for it in iterables:
+                for element in it:
+                    yield element
+        return chain(self.tokenizeLine(line) for line in lines)
+                
+    def tokenizeText(self, txt):
+        return self.tokenizeLines(txt.splitlines())
+
+    def read(self, text, tokenizer):
+        lines = text.splitlines()
+        return self.readLines(lines, tokenizer)
+    
+    def readLines(self, lines, tokenizer):
+        tokens = tokenizer.tokenizeLines(lines)
+        return self.parseTokens(tokens)
+    
+    def parseTokens(self, tokens):
+        for token in tokens:
+            try:
+                yield SExpression.parseTokens(token, tokens, topLevel=True)
+            except SchemeError as e:
+                yield ErrorExpression.make(e)
+            

@@ -88,18 +88,17 @@ def repl():
 
     frame = PScheme.Frame()
     fname = os.path.join(os.path.dirname(__file__), 'boot.scm')
-    tokenizer = PScheme.Tokenizer(fname)
+    parser = PScheme.Parser(fname)
     with open(fname, 'r') as f:
-        tokens = tokenizer.tokenizeLines(f)
-        expressions = frame.parseTokens(tokens)
+        tokens = parser.tokenizeLines(f)
+        expressions = parser.parseTokens(tokens)
         results = frame.evaluateExpressions(expressions) #result generator
         flush(results) # check results to force delayed execution
-            
         
-    tokenizer = PScheme.Tokenizer('console')
+    parser = PScheme.Parser('console')
     lines = readInput() #line generator
-    tokens = tokenizer.tokenizeLines(lines) #token generator
-    expressions = frame.parseTokens(tokens) #expression generator
+    tokens = parser.tokenizeLines(lines) #token generator
+    expressions = parser.parseTokens(tokens) #expression generator
     results = frame.evaluateExpressions(expressions) #result generator
     output(results) #print out results
         

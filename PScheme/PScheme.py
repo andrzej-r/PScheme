@@ -81,7 +81,7 @@ class SchemeError(Exception):
     #    return unicode(self)
         
     def __str__(self):
-        if not 'meta' in self.expr.__dict__:
+        if not hasattr(self.expr, 'meta'): # in self.expr.__dict__:
             return 'Error: ' + self.msg
         fileName = self.expr.meta['fileName']
         line = self.expr.meta['line'].rstrip()
@@ -242,7 +242,7 @@ class SelfEval(SExpression):
         return True
         
     def __str__(self):
-        return self.value
+        return str(self.value)
         
 class Nil(SelfEval):
     cache = None

@@ -68,9 +68,9 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(e, [Number.make(-12.345e-6), Number.make(-0.12e3), Number.make(123e4), Number.make(-1234), Number.make(12), Pair.makeFromList([Symbol.make('+'), Number.make(123.), Number.make(123)])])
         e = self.tp('"asd" "asd\\"dsa"')
         self.assertEqual(e, [String.make('asd',), String.make('asd\\"dsa')])
-        #self.assertRaises(ExpressionError, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string, changed error handling
+        #self.assertRaises(ErrorExpression, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string, changed error handling
         e = self.tp('"asd" "asd\\"dsa""123')
-        self.assertEqual(list(map(type, e)), [String, String, ExpressionError])
+        self.assertEqual(list(map(type, e)), [String, String, ErrorExpression])
         e = self.tp('#t #f')
         self.assertEqual(e, [Boolean.make(True), Boolean.make(False)])
         self.assertEqual(list(map(type, e)), [Boolean, Boolean])
@@ -89,19 +89,19 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("'(1 2)"), ["(1 2)"])
         self.assertEqual(self.tpes("'(1 2 . ())"), ["(1 2)"])
         self.assertEqual(self.tpes("'(1 . 2)"), ["(1 . 2)"])
-        self.assertEqual(type(self.tpe("'(1 2 . )")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("'(1 2 .)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("'(. 1)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("'( . 1)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("'( . )")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("'(1 . 2 3)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("'(1 .a)")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("'(1 2 . )")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("'(1 2 .)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("'(. 1)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("'( . 1)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("'( . )")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("'(1 . 2 3)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("'(1 .a)")[0]), ErrorExpression)
         self.assertEqual(self.tpes("'(1 2 . (+ 1 2))"), ["(1 2 + 1 2)"])
         self.assertEqual(self.tpes("'(1 2 (+ 1 2))"), ["(1 2 (+ 1 2))"])
         self.assertEqual(self.tpes("`(1 2 . ,(+ 1 2))"), ["(1 2 . 3)"])
         self.assertEqual(self.tpes("`(1 2 ,(+ 1 2))"), ["(1 2 3)"])
-        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) 3)")[0]), ExpressionError) # could work but made illegal
-        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) . 3)")[0]), ExpressionError) # could work but made illegal
+        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) 3)")[0]), ErrorExpression) # could work but made illegal
+        self.assertEqual(type(self.tpe("'(1 2 . (+ 1 2) . 3)")[0]), ErrorExpression) # could work but made illegal
         
     def test_030_evalDefineAndLookup(self):
         e = self.tpe('(define a 1)')
@@ -114,7 +114,7 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(e, [Nil.make()])
         self.assertTrue(isinstance(self.frame.symbols['b'], CompoundProcedure))
         self.assertTrue(isinstance(self.tpe('b')[0], CompoundProcedure))
-        self.assertTrue(isinstance(self.tpe('a')[0], ExpressionError))
+        self.assertTrue(isinstance(self.tpe('a')[0], ErrorExpression))
 
         self.assertEqual(self.tpe('(b 3)'), [Number.make(6)])
 
@@ -280,7 +280,7 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("'(quasiquote (list (unquote (+ 1 2)) 4))"), ["`(list ,(+ 1 2) 4)"]) #(quasiquote (list (unquote (+ 1 2)) 4))
 
         # http://bugs.call-cc.org/ticket/439
-        self.assertEqual(type(self.tpe("(let ((a 1)) (quasiquote (unquote a b)))")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("(let ((a 1)) (quasiquote (unquote a b)))")[0]), ErrorExpression)
         s = """
 (define x (list 1 2))
 ;(quasiquote (quasiquote (unquote (unquote x))))
@@ -289,21 +289,21 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes(s)[1], "`,@(1 2)")  #"`,@,x"
         
         self.assertEqual(self.tpes("(quasiquote (quasiquote (unquote-splicing (unquote (list 1 2)))))"), ["`,@(1 2)"])  #"`,@,x"
-        self.assertEqual(type(self.tpe("`,@(+ 1 2)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("(quasiquote)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("(quasiquote 1 2)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("`")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("`(unquote)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("`(unquote 1 2)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("`(unquote-splicing)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("`(unquote-splicing 1 2)")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("```,,,,1 ")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("```,@,@,@,@'()")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`,@(+ 1 2)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(quasiquote)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(quasiquote 1 2)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("`")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("`(unquote)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("`(unquote 1 2)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("`(unquote-splicing)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("`(unquote-splicing 1 2)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("```,,,,1 ")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("```,@,@,@,@'()")[0]), ErrorExpression)
         self.assertEqual(self.tpes("`(,@'())"), ["()"])
-        self.assertEqual(type(self.tpe("`,@'()")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("`,@'()")[0]), ErrorExpression)
         self.assertEqual(self.tpes("```(,@,@'())"), ["``(,@,@'())"])
-        self.assertEqual(type(self.tpe("```(,@,@,@'())")[0]), ExpressionError)
-        self.assertEqual(type(self.tpe("```(,,,@'())")[0]), ExpressionError)
+        self.assertEqual(type(self.tpe("```(,@,@,@'())")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("```(,,,@'())")[0]), ErrorExpression)
         self.assertEqual(self.tpes("```,,,1"), ["``,,1"])
 
     def test_eqv(self):

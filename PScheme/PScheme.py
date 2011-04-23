@@ -69,11 +69,33 @@ ptokens = re.compile(tokens, flags)
 
 
 class SchemeError(Exception):
+    """
+    Exception class representing Scheme Expression parsing or evaluation error.
+    """
+    def __init__(self, expr, msg=''):
+        "``expr`` can be either SExpression or Token. It must contain ``meta`` attribute."
+        self.expr = expr
+        self.msg = msg
+        
+    #def __str__(self):
+    #    return unicode(self)
+        
+    def __str__(self):
+        if not 'meta' in self.expr.__dict__:
+            return 'Error: ' + self.msg
+        fileName = self.expr.meta['fileName']
+        line = self.expr.meta['line'].rstrip()
+        lineNo = str(self.expr.meta['lineNo'])
+        start = self.expr.meta['colStart']
+        span = self.expr.meta['colEnd'] - start
+        return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
+        
 class Token(object):
     """
     Class for representing a token of a Scheme source code. In addition to that it also
     stores some metadata (line containing the token, line and column numbers).
     """
+    __slots__ = ['text', 'meta']
     def __init__(self, text, meta):
         self.text = text
         self.meta = meta
@@ -103,7 +125,7 @@ class SExpression(object):
         elif SExpression.pstring.match(text):
             expr = String.parseToken(token)
         elif SExpression.pbrokenstring.match(text):
-            raise(ExpressionError(token, 'Unterminated string ')) # + text))
+            raise(SchemeError(token, 'Unterminated string ')) # + text))
         elif SExpression.pchar.match(text):
             expr = Char.parseToken(token)
         elif SExpression.pboolean.match(text):
@@ -113,33 +135,33 @@ class SExpression(object):
                 expr = Pair.makeFromList([Symbol.make('quote'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
                 expr.meta = token.meta
             except StopIteration:
-                raise(ExpressionError(token, 'Nothing to quote.'))
+                raise(SchemeError(token, 'Nothing to quote.'))
         elif text == '`':
             try:
                 expr = Pair.makeFromList([Symbol.make('quasiquote'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
                 expr.meta = token.meta
             except StopIteration:
-                raise(ExpressionError(token, 'Nothing to quasiquote.'))
+                raise(SchemeError(token, 'Nothing to quasiquote.'))
         elif text == ',':
             try:
                 expr = Pair.makeFromList([Symbol.make('unquote'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
                 expr.meta = token.meta
             except StopIteration:
-                raise(ExpressionError(token, 'Nothing to unquote.'))
+                raise(SchemeError(token, 'Nothing to unquote.'))
         elif text == ',@':
             try:
                 expr = Pair.makeFromList([Symbol.make('unquote-splicing'), SExpression.parseTokens(next(tokens), tokens, topLevel=topLevel)])
                 expr.meta = token.meta
             except StopIteration:
-                raise(ExpressionError(token, 'Nothing to unquote-splicing.'))
+                raise(SchemeError(token, 'Nothing to unquote-splicing.'))
         elif SExpression.psymbol.match(text):
             expr = Symbol.parseToken(token)
         else:
-            raise(ExpressionError(token, 'Unrecognized token "' + text + '"'))
+            raise(SchemeError(token, 'Unrecognized token "' + text + '"'))
         return expr
             
     def eval(self, frame, cont):
-        raise ExpressionError(self, 'Abstract SExpression should not be evaluated directly')
+        raise SchemeError(self, 'Abstract SExpression should not be evaluated directly')
     
     def __ne__(self, other):
         return not (self == other)
@@ -211,6 +233,7 @@ class SExpression(object):
         return False
     
 class SelfEval(SExpression):
+    __slots__ = ['value']
     def eval(self, frame, cont):
         return Trampolined.make(cont, self)
         #return self
@@ -221,7 +244,7 @@ class SelfEval(SExpression):
     def __str__(self):
         return self.value
         
-class Nil(SExpression):
+class Nil(SelfEval):
     cache = None
     
     @classmethod
@@ -240,6 +263,7 @@ class Nil(SExpression):
         return other is self
 
 class Char(SelfEval):
+    __slots__ = []
     pchar = re.compile(r'^#\\(.+)$', flags)
 
     cache = {}
@@ -280,6 +304,7 @@ class Char(SelfEval):
         
         
 class String(SelfEval):
+    __slots__ = []
     flags2 = flags #| re.M
     pstring = re.compile(r'^\"((?:[^"]|\")*)\"$', flags)
     p1  = re.compile(r'\\\\', flags2)
@@ -307,7 +332,6 @@ class String(SelfEval):
     def parseToken(cls, token, tokens=[]):
         match = cls.pstring.match(token.text)
         string = cls.make(match.group(1))
-        string.meta = token.meta
         return string
 
     def isString(self):
@@ -341,6 +365,7 @@ class String(SelfEval):
         return (other is self) or (type(other) == type(self) and other.value == self.value)
         
 class Number(SelfEval):
+    __slots__ = []
     @classmethod
     def make(cls, value):
         if isinstance(value, int):
@@ -352,10 +377,9 @@ class Number(SelfEval):
     def parseToken(cls, token, tokens=[]):
         text = token.text
         if (text.find('.') >= 0 or text.find('e') >= 0):
-            return RealNumber.make(float(text), token.meta)
+            return RealNumber.make(float(text))
         else:
             return IntegerNumber.make(int(text))
-            #return IntegerNumber.makeUnCached(long(text), token.meta)
 
     def isNumber(self):
         return True
@@ -364,6 +388,7 @@ class Number(SelfEval):
         return str(self.value)
                 
 class IntegerNumber(Number):
+    __slots__ = []
     cache = [None]*256
     
     @classmethod
@@ -406,12 +431,11 @@ class IntegerNumber(Number):
         return (other is self) or (type(other) == type(self) and other.value == self.value)
 
 class RealNumber(Number):
+    __slots__ = []
     @classmethod
-    def make(cls, value, meta = None):
+    def make(cls, value):
         self = cls()
         self.value = value
-        if meta:
-            self.meta = meta
         return self
 
     def isReal(self):
@@ -424,6 +448,7 @@ class RealNumber(Number):
         return (other is self) or (type(other) == type(self) and other.value == self.value)
 
 class Boolean(SelfEval):
+    __slots__ = []
     cache = {}
     
     @classmethod
@@ -466,32 +491,23 @@ class Boolean(SelfEval):
         #return (other is self) or (type(other) == type(self) and other.value == self.value) or (type(other) != type(self) and self.value)
         #return (other is self) or (other.value == self.value) or (not other.isBoolean() and self.value)
         
-class ExpressionError(Exception, SelfEval):
+class ErrorExpression(SelfEval):
     """
-    Exception class representing Scheme Expression parsing or evaluation error.
+    A 'placeholder' expression serving only as a storage for errors that occurred during at
+    the token parsing stage.
     """
-    def __init__(self, expr, msg=''):
-        "``expr`` can be either SExpression or Token. It must contain ``meta`` attribute."
-        self.expr = expr
-        self.msg = msg
-        
-    #def __str__(self):
-    #    return unicode(self)
-        
-    def __str__(self):
-        if not 'meta' in self.expr.__dict__:
-            return 'Error: ' + self.msg
-        fileName = self.expr.meta['fileName']
-        line = self.expr.meta['line'].rstrip()
-        lineNo = str(self.expr.meta['lineNo'])
-        start = self.expr.meta['colStart']
-        span = self.expr.meta['colEnd'] - start
-        return 'Error: ' + self.msg + '\n' + fileName + ':' + lineNo + ', ' + line + '\n' + (' ' * (start+len(fileName)+len(lineNo)+2)) + ('-' * span)
-        
-    def __repr__(self):
-        return '<ExpressionError ' + self.msg + '>'
+
+    __slots__ = []
+    
+    @classmethod
+    def make(cls, exception):
+        self = cls()
+        self.value = exception
+        return self
 
 class Symbol(SExpression):
+    __slots__ = ['name']
+
     cache = {}
     
     @classmethod
@@ -529,6 +545,7 @@ class Symbol(SExpression):
         return (other is self) # not needed because of chaching # or (type(other) == type(self) and other.name == self.name)
 
 class Null(SExpression):
+    __slots__ = []
     cache = None
         
     @classmethod
@@ -546,7 +563,7 @@ class Null(SExpression):
     #    return self
     
     def eval(self, frame, cont):
-        raise ExpressionError(self, 'Empty application.')
+        raise SchemeError(self, 'Empty application.')
 
     def evalElements(self, frame, cont, excp=None):
         return Trampolined.make(cont, self)
@@ -582,6 +599,7 @@ class Null(SExpression):
         return (other is self) #or (type(other) == type(self))
 
 class Pair(SExpression):
+    __slots__ = ['car', 'cdr', 'quasiquoteLevel', 'unquoteSplice', 'meta', 'topLevel']
     @classmethod
     def make(cls, car, cdr):
         self = cls()
@@ -625,8 +643,9 @@ class Pair(SExpression):
                         improper = True
                     elif t.text == ')':
                         self = self.cdr #discard empty car
-                        self.meta = token.meta
-                        self.topLevel = topLevel
+                        if self.isPair():
+                            self.meta = token.meta
+                            self.topLevel = topLevel
                         return self
                     else:
                         expr = SExpression.parseTokens(t, tokens)
@@ -637,7 +656,7 @@ class Pair(SExpression):
                         error = True
                     elif t.text == ')':
                         if error or improper != 2: #earlier error or wrong number of expressions after dot
-                            raise ExpressionError(token, 'Wrong pair format.')
+                            raise SchemeError(token, 'Wrong pair format.')
                         self = self.cdr #discard empty car
                         self.meta = token.meta
                         self.topLevel = topLevel
@@ -651,7 +670,7 @@ class Pair(SExpression):
                             tail.cdr = expr
                             tail = tail.cdr
         except StopIteration:
-            raise ExpressionError(token, 'Unterminated list.')
+            raise SchemeError(token, 'Unterminated list.')
         
     def append(self, pair):
         res = Pair.make(self.car, self.cdr)
@@ -682,8 +701,8 @@ class Pair(SExpression):
             def step3(operands):
                 return operator.apply(operands, self, cont)
             if not operator.isProcedure():
-                raise ExpressionError(self, 'procedure application, first operand is not a procedure.')
-            return self.cdr.evalElements(frame, step3, ExpressionError(self, '"eval": improper operand list'))
+                raise SchemeError(self, 'procedure application, first operand is not a procedure.')
+            return self.cdr.evalElements(frame, step3, SchemeError(self, '"eval": improper operand list'))
         if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms:
             return SpecialSyntax.specialForms[self.car.name]().apply(self.cdr, self, frame, cont)
         return self.car.eval(frame, step2)
@@ -803,6 +822,7 @@ class Pair(SExpression):
             oCdr = oCdr.cdr
 
 class Procedure(SExpression):
+    __slots__ = []
     def apply(self, operands, callingForm, cont = None):
         pass
         
@@ -810,9 +830,10 @@ class Procedure(SExpression):
         return True
 
     def eval(self, frame, cont):
-        raise ExpressionError(self, 'Procedure should not be evaluated directly')
+        raise SchemeError(self, 'Procedure should not be evaluated directly')
     
 class Continuation(Procedure):
+    __slots__ = ['continuation']
     @classmethod
     def make(cls, continuation):
         self = cls()
@@ -824,13 +845,14 @@ class Continuation(Procedure):
         
     def apply(self, operands, callingForm, cont = None):
         if len(operands) != 1:
-            raise ExpressionError(callingForm, 'Wrong number of operands, required 1, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, 'Wrong number of operands, required 1, provided ' + str(len(operands)) + '.')
         return Trampolined(operands.car)
     
     def __str__(self):
         return '#<continuation 0x%x>' % id(self)
 
 class CompoundProcedure(Procedure):
+    __slots__ = ['formals', 'body', 'frame', 'meta']
     @classmethod
     def make(cls, formals, body, frame, meta):
         self = cls()
@@ -847,13 +869,13 @@ class CompoundProcedure(Procedure):
         pointer = self.formals
         while pointer.isPair():
             if not pointer.car.isSymbol():
-                raise ExpressionError(self, 'Invalid procedure operand name')
+                raise SchemeError(self, 'Invalid procedure operand name')
             if pointer.car.name in defined:
-                raise ExpressionError(self, 'Duplicated operand name')
+                raise SchemeError(self, 'Duplicated operand name')
             defined.add(pointer.car.name)
             pointer = pointer.cdr
         if not pointer.isSymbol() and not pointer.isNull():
-            raise ExpressionError(self, 'Invalid procedure operand name')
+            raise SchemeError(self, 'Invalid procedure operand name')
         
     def bind(self, formals, operands, callingForm, frame, cont):
         if formals.isNull() and operands.isNull():
@@ -865,13 +887,13 @@ class CompoundProcedure(Procedure):
             frame.addSymbol(formals.car, operands.car)
             return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
         elif formals.isList():
-            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
+            raise SchemeError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
         else:
-            raise ExpressionError(callingForm, 'Wrong number of operands, required at least ' + str(len(self.formals) - 1) + '.')
+            raise SchemeError(callingForm, 'Wrong number of operands, required at least ' + str(len(self.formals) - 1) + '.')
         
     def bind_(self, formals, operands, callingForm, frame, cont):
         if operands.isNull() and formals.isPair():
-            raise ExpressionError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
+            raise SchemeError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
         if operands.isNull() and formals.isNull():
             return Trampolined.make(cont, frame)
         if formals.isSymbol():
@@ -880,7 +902,7 @@ class CompoundProcedure(Procedure):
         if operands.isPair() and formals.isPair() and formals.car.isSymbol():
             frame.addSymbol(formals.car, operands.car)
             return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
-        raise ExpressionError(callingForm, 'Wrong format of operands.')
+        raise SchemeError(callingForm, 'Wrong format of operands.')
         
     def apply(self, operands, callingForm, cont = None):
         def step2(newFrame):
@@ -891,6 +913,8 @@ class CompoundProcedure(Procedure):
         return '#<procedure %s 0x%x>' % (str(self.formals), id(self))
 
 class Trampolined(SExpression):
+    __slots__ = ['continuation', 'operand']
+
     @classmethod
     def make(cls, continuation, operand):
         #if continuation == None:
@@ -940,7 +964,7 @@ class SpecialSyntax(SExpression):
         return cls.object
             
     def eval(self, frame, cont):
-        raise ExpressionError(self, 'Special syntax should not be evaluated directly')
+        raise SchemeError(self, 'Special syntax should not be evaluated directly')
     
     def apply(self, operands, callingForm, frame, cont = None):
         pass
@@ -955,7 +979,7 @@ class QuoteForm(SpecialSyntax):
     "Implements a :c:macro:`quote` or :c:macro:`'` form."
     def apply(self, operands, callingForm, frame, cont = None):
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"quote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"quote" requires 1 operand, ' + str(len(operands)) + ' given.')
         res = operands.car
         return Trampolined.make(cont, res)
 
@@ -993,7 +1017,7 @@ class QuasiQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont = None):
         def step2(expr):
             if expr.isPair() and expr.unquoteSplice:
-                raise ExpressionError(callingForm, '"unquote-splicing" should not expand directly in "quasiquote".')
+                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "quasiquote".')
             if callingForm.quasiquoteLevel == 1:
                 return Trampolined.make(cont, expr)
             else:
@@ -1002,7 +1026,7 @@ class QuasiQuoteForm(QuotedForm):
                 form.quasiquoteLevel = callingForm.quasiquoteLevel
                 return Trampolined.make(cont, form)
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"quasiquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"quasiquote" requires 1 operand, ' + str(len(operands)) + ' given.')
         callingForm.quasiquoteLevel += 1
         return self.processExpression(operands.car, callingForm, frame, step2)
             
@@ -1011,16 +1035,16 @@ class UnQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont):
         def step2(expr):
             if expr.isPair() and expr.unquoteSplice:
-                raise ExpressionError(callingForm, '"unquote-splicing" should not expand directly in "unquote".')
+                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "unquote".')
             form = Pair.makeFromList([Symbol.make("unquote"), expr])
             form.meta = callingForm.meta
             form.quasiquoteLevel = callingForm.quasiquoteLevel
             return Trampolined.make(cont, form)
         callingForm.quasiquoteLevel -= 1
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"unquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"unquote" requires 1 operand, ' + str(len(operands)) + ' given.')
         if callingForm.quasiquoteLevel < 0:
-            raise ExpressionError(callingForm, '"unquote" outside of "quasiquote".')
+            raise SchemeError(callingForm, '"unquote" outside of "quasiquote".')
         if callingForm.quasiquoteLevel == 0:
             return operands.car.eval(frame, cont)
         else:
@@ -1031,22 +1055,22 @@ class UnQuoteSplicingForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont = None):
         def evaluated(res):
             if not res.isPair() and not res.isNull():
-                raise ExpressionError(callingForm, 'result of "unquote-splicing" is not a list.')
+                raise SchemeError(callingForm, 'result of "unquote-splicing" is not a list.')
             res = Pair.make(res, Null.make()) # wrap it with a pair because we must set 'unquoteSplice' and Null is immutable
             res.unquoteSplice = True
             return Trampolined.make(cont, res)
         def expanded(expr):
             if expr.isPair() and expr.unquoteSplice:
-                raise ExpressionError(callingForm, '"unquote-splicing" should not expand directly in "unquote-splicing".')
+                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "unquote-splicing".')
             form = Pair.makeFromList([Symbol.make("unquote-splicing"), expr])
             form.meta = callingForm.meta
             form.quasiquoteLevel = callingForm.quasiquoteLevel
             return Trampolined.make(cont, form)
         callingForm.quasiquoteLevel -= 1
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"unquote-splicing" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"unquote-splicing" requires 1 operand, ' + str(len(operands)) + ' given.')
         if callingForm.quasiquoteLevel < 0:
-            raise ExpressionError(callingForm, '"unquote-splicing" outside of "quasiquote".')
+            raise SchemeError(callingForm, '"unquote-splicing" outside of "quasiquote".')
         if callingForm.quasiquoteLevel == 0:
             return operands.car.eval(frame, evaluated)
         else:
@@ -1056,12 +1080,12 @@ class DefineForm(SpecialSyntax):
     "Implements a :c:macro:`define` form."
     def apply(self, operands, callingForm, frame, cont):
         #if not self.topLevel: # and not self.inBody:
-        #    raise ExpressionError(self, '"define" only allowed at the top level or in a body of a procedure')
+        #    raise SchemeError(self, '"define" only allowed at the top level or in a body of a procedure')
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"define" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"define" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         firstArg = operands.car
         if not firstArg.isSymbol() and not firstArg.isPair():
-            raise ExpressionError(callingForm, '"define": Invalid type of the first operand')
+            raise SchemeError(callingForm, '"define": Invalid type of the first operand')
         if firstArg.isSymbol():
             def step2(value):
                 frame.addSymbol(firstArg, value)
@@ -1069,7 +1093,7 @@ class DefineForm(SpecialSyntax):
             return operands.cdr.car.eval(frame, step2)
         if firstArg.isPair():
             if not firstArg.car.isSymbol():
-                raise ExpressionError(callingForm, 'Invalid procedure name in "define"')
+                raise SchemeError(callingForm, 'Invalid procedure name in "define"')
             procName = firstArg.car
             formals = firstArg.cdr #.toList()
             body = operands.cdr
@@ -1081,10 +1105,10 @@ class LambdaForm(SpecialSyntax):
     "Implements a :c:macro:`lambda` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"lambda" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"lambda" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         formals = operands.car
         if not formals.isSymbol() and not formals.isPair() and not formals.isNull():
-            raise ExpressionError(callingForm, '"lambda": Invalid type of the first operand')
+            raise SchemeError(callingForm, '"lambda": Invalid type of the first operand')
         body = operands.cdr
         procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
         return Trampolined.make(cont, procedure)
@@ -1093,7 +1117,7 @@ class LetForm(SpecialSyntax):
     "Implements a :c:macro:`let` form. Named :c:macro:`let` not yet supported."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"let" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"let" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         def step2(newFrame):
             return operands.cdr.evalSequence(newFrame, cont)
         return self.processBindings(operands.car, callingForm, frame, Frame(frame), step2)
@@ -1101,25 +1125,25 @@ class LetForm(SpecialSyntax):
     def processBindings(self, bindings, callingForm, oldFrame, newFrame, cont):
         def step2(bindingValue):
             if not binding.car.isSymbol():
-                raise ExpressionError(callingForm, '"let": incorrect binding form (first element is not a symbol).')
+                raise SchemeError(callingForm, '"let": incorrect binding form (first element is not a symbol).')
             if binding.car.name in newFrame.symbols:
-                raise ExpressionError(callingForm, '"let": multiple uses of the same variable in the binding form.')
+                raise SchemeError(callingForm, '"let": multiple uses of the same variable in the binding form.')
             newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
         binding = bindings.car
         if not binding.isPair():
-            raise ExpressionError(callingForm, '"let": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"let": invalid binding form (not a list).')
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"let": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"let": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
         return binding.cdr.car.eval(oldFrame, step2)
 
 class LetStarForm(SpecialSyntax):
     "Implements a :c:macro:`let*` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"let*" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"let*" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         def step2(newFrame):
             return operands.cdr.evalSequence(newFrame, cont)
         return self.processBindings(operands.car, callingForm, frame, step2)
@@ -1127,9 +1151,9 @@ class LetStarForm(SpecialSyntax):
     def processBindings(self, bindings, callingForm, frame, cont):
         def step2(bindingValue):
             if not binding.car.isSymbol():
-                raise ExpressionError(callingForm, '"let*": incorrect binding form (first element is not a symbol).')
+                raise SchemeError(callingForm, '"let*": incorrect binding form (first element is not a symbol).')
             #if binding.car.name in newFrame.symbols:
-            #    raise ExpressionError(callingForm, '"let*": multiple uses of the same variable in the binding form.')
+            #    raise SchemeError(callingForm, '"let*": multiple uses of the same variable in the binding form.')
             newFrame = Frame(frame)
             newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, newFrame, cont)
@@ -1137,16 +1161,16 @@ class LetStarForm(SpecialSyntax):
             return Trampolined.make(cont, frame)
         binding = bindings.car
         if not binding.isPair():
-            raise ExpressionError(callingForm, '"let*": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"let*": invalid binding form (not a list).')
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"let*": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"let*": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
         return binding.cdr.car.eval(frame, step2)
 
 class LetrecForm(SpecialSyntax):
     "Implements a :c:macro:`letrec` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"letrec" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"letrec" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         def step2(newFrame):
             def step3(newFrame2):
                 return operands.cdr.evalSequence(newFrame2, cont)
@@ -1158,13 +1182,13 @@ class LetrecForm(SpecialSyntax):
             return Trampolined.make(cont, newFrame)
         binding = bindings.car
         if not binding.isPair():
-            raise ExpressionError(callingForm, '"letrec": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"letrec": invalid binding form (not a list).')
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"letrec": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"letrec": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
         if not binding.car.isSymbol():
-            raise ExpressionError(callingForm, '"letrec": incorrect binding form (first element is not a symbol).')
+            raise SchemeError(callingForm, '"letrec": incorrect binding form (first element is not a symbol).')
         if binding.car.name in newFrame.symbols:
-            raise ExpressionError(callingForm, '"letrec": multiple uses of the same variable in the binding form.')
+            raise SchemeError(callingForm, '"letrec": multiple uses of the same variable in the binding form.')
         newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         #return binding.cdr.car.eval(oldFrame, step2)
@@ -1182,13 +1206,13 @@ class SetForm(SpecialSyntax):
     "Implements a :c:macro:`set!` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"set!" requires 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"set!" requires 2 operands, ' + str(len(operands)) + ' given.')
         var = operands.car
         if not var.isSymbol():
-            raise ExpressionError(callingForm, '"set!" first operand is not a symbol.')
+            raise SchemeError(callingForm, '"set!" first operand is not a symbol.')
         targetFrame = frame.resolveSymbolLocation(var.name)
         if targetFrame == None:
-            raise ExpressionError(callingForm, '"set!" undefined symbol' + var.name + '.')
+            raise SchemeError(callingForm, '"set!" undefined symbol' + var.name + '.')
         def step2(value):
             targetFrame[var.name] = value
             return Trampolined.make(cont, Nil.make())
@@ -1198,7 +1222,7 @@ class IfForm(SpecialSyntax):
     "Implements a :c:macro:`if` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull() or (operands.cdr.cdr.isPair() and operands.cdr.cdr.cdr.isPair()):
-            raise ExpressionError(callingForm, '"if" requires 2 or 3 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"if" requires 2 or 3 operands, ' + str(len(operands)) + ' given.')
         def step2(predicate):
             if not predicate.isBoolean() or predicate.value: #True
                 res = operands.cdr.car.eval(frame, cont)
@@ -1213,7 +1237,7 @@ class CondForm(SpecialSyntax):
     "Implements a :c:macro:`cond` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull():
-            raise ExpressionError(callingForm, '"cond" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"cond" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         def step2(clause):
             if clause.isPair():
                 return clause.cdr.car.eval(frame, cont)
@@ -1226,7 +1250,7 @@ class CondForm(SpecialSyntax):
             return Trampolined.make(cont, Nil.make())
         clause = clauses.car
         if not clause.isPair() or not clause.cdr.isPair() or not clause.cdr.cdr.isNull():
-            raise ExpressionError(clause, '"cond": invalid clause format.')
+            raise SchemeError(clause, '"cond": invalid clause format.')
         def step2(boolValue):
             if (not boolValue.isBoolean() or boolValue.value == True):
                 return Trampolined.make(cont, clause)
@@ -1305,14 +1329,14 @@ class IsNullProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`null?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
         return Trampolined.make(cont, Boolean.make(operands.car.isNull()))
 
 class ConsProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cons` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"cons" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"cons" requires 2 operands, provided ' + str(len(operands)) + '.')
         expr1 = operands.car
         expr2 = operands.cdr.car
         res = Pair.make(expr1, expr2)
@@ -1322,10 +1346,10 @@ class CarProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`car` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"car" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"car" requires 1 operand, provided ' + str(len(operands)) + '.')
         arg = operands.car
         if not arg.isPair():
-            raise ExpressionError(callingForm, '"car" operand must be a pair.')
+            raise SchemeError(callingForm, '"car" operand must be a pair.')
         res = arg.car
         return Trampolined.make(cont, res)
 
@@ -1333,10 +1357,10 @@ class CdrProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cdr` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"cdr" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"cdr" requires 1 operand, provided ' + str(len(operands)) + '.')
         arg = operands.car
         if not arg.isPair():
-            raise ExpressionError(callingForm, '"cdr" operand must be a pair.')
+            raise SchemeError(callingForm, '"cdr" operand must be a pair.')
         res = arg.cdr
         return Trampolined.make(cont, res)
             
@@ -1344,11 +1368,11 @@ class Append2Procedure(PrimitiveProcedure):
     "Implements a two-argument :c:macro:`append` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"append2" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"append2" requires 2 operands, provided ' + str(len(operands)) + '.')
         expr1 = operands.car
         expr2 = operands.cdr.car
         if (not expr1.isNull() and not expr1.isPair()) or (not expr2.isNull() and not expr2.isPair()):
-            raise ExpressionError(callingForm, '"append2": operands must be lists.')
+            raise SchemeError(callingForm, '"append2": operands must be lists.')
         res = expr1.append(expr2)
         return Trampolined.make(cont, res)
 
@@ -1356,7 +1380,7 @@ class NotProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`not` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"not" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"not" requires 1 operand, provided ' + str(len(operands)) + '.')
         arg = operands.car
         value = False
         if arg.isBoolean():
@@ -1368,7 +1392,7 @@ class EqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`eq?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"eq?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"eq?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1387,7 +1411,7 @@ class EqvProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`eqv?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"eqv?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"eqv?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1411,7 +1435,7 @@ class EqualProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`equal?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"equal?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"equal?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1426,16 +1450,16 @@ class NumEqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`=` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         first = operands.car
         if not first.isNumber():
-            raise ExpressionError(callingForm, '"=": operand is not a Number')
+            raise SchemeError(callingForm, '"=": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, '"=": operand is not a Number')
+                raise SchemeError(callingForm, '"=": operand is not a Number')
             if n.value != first.value:
                 value = False
             cdr = cdr.cdr
@@ -1446,16 +1470,16 @@ class NumLTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`<` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"<" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"<" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, '"<": operand is not a Number')
+            raise SchemeError(callingForm, '"<": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, '"<": operand is not a Number')
+                raise SchemeError(callingForm, '"<": operand is not a Number')
             if previous.value >= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1467,16 +1491,16 @@ class NumLTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`<=` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '"<=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"<=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, '"<=": operand is not a Number')
+            raise SchemeError(callingForm, '"<=": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, '"<=": operand is not a Number')
+                raise SchemeError(callingForm, '"<=": operand is not a Number')
             if previous.value > n.value:
                 value = False
             cdr = cdr.cdr
@@ -1488,16 +1512,16 @@ class NumGTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`>` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '">" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '">" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, '">": operand is not a Number')
+            raise SchemeError(callingForm, '">": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, '">": operand is not a Number')
+                raise SchemeError(callingForm, '">": operand is not a Number')
             if previous.value <= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1509,16 +1533,16 @@ class NumGTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`>=` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise ExpressionError(callingForm, '">=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '">=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise ExpressionError(callingForm, '">=": operand is not a Number')
+            raise SchemeError(callingForm, '">=": operand is not a Number')
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise ExpressionError(callingForm, '">=": operand is not a Number')
+                raise SchemeError(callingForm, '">=": operand is not a Number')
             if previous.value < n.value:
                 value = False
             cdr = cdr.cdr
@@ -1532,7 +1556,7 @@ class SumProcedure(PrimitiveProcedure):
         value = 0
         for n in operands:
             if not n.isNumber():
-                raise ExpressionError(callingForm, '"+": operand is not a Number')
+                raise SchemeError(callingForm, '"+": operand is not a Number')
             value += n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1541,16 +1565,16 @@ class SubtractProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`-` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull():
-            raise ExpressionError(callingForm, '"-" requires at least 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"-" requires at least 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, '"-": operand is not a Number')
+            raise SchemeError(callingForm, '"-": operand is not a Number')
         if operands.cdr.isNull():
             res = Number.make(-operands.car.value)
         else:
             value = operands.car.value
             for n in operands.cdr:
                 if not n.isNumber():
-                    raise ExpressionError(callingForm, '"-": operand is not a Number')
+                    raise SchemeError(callingForm, '"-": operand is not a Number')
                 value -= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1561,7 +1585,7 @@ class MultiplyProcedure(PrimitiveProcedure):
         value = 1
         for n in operands:
             if not n.isNumber():
-                raise ExpressionError(callingForm, '"*": operand is not a Number')
+                raise SchemeError(callingForm, '"*": operand is not a Number')
             value *= n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1570,18 +1594,18 @@ class DivideProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`/` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull():
-            raise ExpressionError(callingForm, '"/" requires at least 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"/" requires at least 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, '"/": operand is not a Number')
+            raise SchemeError(callingForm, '"/": operand is not a Number')
         if operands.cdr.isNull():
             res = Number.make(1.0/operands[0].value)
         else:
             value = float(operands.car.value)
             for n in operands.cdr:
                 if not n.isNumber():
-                    raise ExpressionError(callingForm, '"/": operand is not a Number')
+                    raise SchemeError(callingForm, '"/": operand is not a Number')
                 if n.value == 0:
-                    raise ExpressionError(callingForm, '"/": division by 0')
+                    raise SchemeError(callingForm, '"/": division by 0')
                 value /= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1590,13 +1614,13 @@ class ModuloProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`modulo` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"modulo" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"modulo" requires 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, '"modulo": operand is not a Number')
+            raise SchemeError(callingForm, '"modulo": operand is not a Number')
         if not operands.cdr.car.isNumber():
-            raise ExpressionError(callingForm, '"modulo": operand is not a Number')
+            raise SchemeError(callingForm, '"modulo": operand is not a Number')
         if operands.cdr.car.value == 0:
-            raise ExpressionError(callingForm, '"modulo": division by 0')
+            raise SchemeError(callingForm, '"modulo": division by 0')
         res = Number.make(operands.car.value % operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
@@ -1604,13 +1628,13 @@ class RemainderProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`remainder` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"remainder" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"remainder" requires 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, '"remainder": operand is not a Number')
+            raise SchemeError(callingForm, '"remainder": operand is not a Number')
         if not operands.cdr.car.isNumber():
-            raise ExpressionError(callingForm, '"remainder": operand is not a Number')
+            raise SchemeError(callingForm, '"remainder": operand is not a Number')
         if operands.cdr.car.value == 0:
-            raise ExpressionError(callingForm, '"remainder": division by 0')
+            raise SchemeError(callingForm, '"remainder": division by 0')
         dividend = operands.car.value
         divisor = operands.cdr.car.value
         res = Number.make(dividend - divisor*int(float(dividend)/divisor))
@@ -1620,13 +1644,13 @@ class QuotientProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`quotient` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"quotient" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"quotient" requires 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isNumber():
-            raise ExpressionError(callingForm, '"quotient": operand is not a Number')
+            raise SchemeError(callingForm, '"quotient": operand is not a Number')
         if not operands.cdr.car.isNumber():
-            raise ExpressionError(callingForm, '"quotient": operand is not a Number')
+            raise SchemeError(callingForm, '"quotient": operand is not a Number')
         if operands.cdr.car.value == 0:
-            raise ExpressionError(callingForm, '"quotient": division by 0')
+            raise SchemeError(callingForm, '"quotient": division by 0')
         res = Number.make(operands.car.value // operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
@@ -1634,9 +1658,9 @@ class WriteCharProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`write-char` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise ExpressionError(callingForm, '"write-char" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"write-char" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
         if not operands.car.isChar():
-            raise ExpressionError(callingForm, '"write-char": operand is not a Character')
+            raise SchemeError(callingForm, '"write-char": operand is not a Character')
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
@@ -1644,7 +1668,7 @@ class DisplayProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`display` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise ExpressionError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
@@ -1652,23 +1676,23 @@ class Apply2Procedure(PrimitiveProcedure):
     "Implements a two-argument :c:macro:`apply2` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise ExpressionError(callingForm, '"apply2" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"apply2" requires 2 operands, provided ' + str(len(operands)) + '.')
         procedure = operands.car
         if not procedure.isProcedure():
-            raise ExpressionError(callingForm, '"apply2": first operand must be a procedure.')
+            raise SchemeError(callingForm, '"apply2": first operand must be a procedure.')
         operands = operands.cdr.car
         #if not operands.isNull() and not operands.isPair():
         if not operands.isList():
-            raise ExpressionError(callingForm, '"apply2": second operand must be a list.')
+            raise SchemeError(callingForm, '"apply2": second operand must be a list.')
         return procedure.apply(operands, callingForm, cont)
 
 class CallCCProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`call/cc` or :c:macro:`call-with-current-continuation` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise ExpressionError(callingForm, '"call/cc" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"call/cc" requires 1 operand, provided ' + str(len(operands)) + '.')
         if not operands.car.isProcedure():
-            raise ExpressionError(callingForm, '"call/cc": operand must be a procedure.')
+            raise SchemeError(callingForm, '"call/cc": operand must be a procedure.')
         continuation = Continuation.make(cont)
         return operands.car.apply(Pair.makeFromList([continuation]), callingForm, cont)
 

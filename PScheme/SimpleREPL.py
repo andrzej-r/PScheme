@@ -26,6 +26,12 @@
 # authors and should not be interpreted as representing official policies, either expressed
 # or implied, of PScheme Contributors.
 
+"""
+The :mod:`PScheme.SimpleREPL` module implements is a basic Read-Eval-Print Loop (REPL) for
+PScheme interpreter. Except for providing basic features, it serves as
+a template for building custom REPL's.
+"""
+
 import PScheme
 import os
 import sys
@@ -39,6 +45,10 @@ except ImportError:
     pass
 
 def readInput():
+    """
+    Reads an input and produce a stream (a generator) of text lines.
+    Exits on EOF or user interrupt.
+    """
     try:
         while True:
             if sys.version_info[0] == 2:
@@ -50,14 +60,32 @@ def readInput():
         return
         
 def flush(generator):
+    """
+    Reads (and ignores) the content produced by the *generator*.
+    Use it to trigger the execution of the code producing this content.
+    """
     for element in generator: pass
             
 def output(results):
+    """
+    Reads and displays *results*. *Results* are a generator and each chunk
+    is expected to implement a meaningful :meth:`__str__` method.
+    """
     for result in results:
         if not isinstance(result, PScheme.Nil):
             print(result)
             
 def repl():
+    """
+    Main Read-Eval-Print Loop. Reads the inputs, tokenizes them, parses,
+    evaluates and prints out the results. Since all values are streams of data,
+    the looping operations are burried in the generator functions.
+
+    Before starting the interactive loop, the function evaluates contents
+    of a bootstrap `boot.scm` file, which must reside in the same directory
+    as the module.
+    """
+
     frame = PScheme.Frame()
     fname = os.path.join(os.path.dirname(__file__), 'boot.scm')
     tokenizer = PScheme.Tokenizer(fname)

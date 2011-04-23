@@ -648,7 +648,7 @@ class Pair(SExpression):
                             self.topLevel = topLevel
                         return self
                     else:
-                        expr = SExpression.parseTokens(t, tokens)
+                        expr = SExpression.parseTokens(t, tokens) #assumes that 'tokens' is a generator, not a list
                         tail.cdr = cls.make(expr, Null.make())
                         tail = tail.cdr
                 else: # improper
@@ -1791,9 +1791,10 @@ class Parser(object):
         return self.parseTokens(tokens)
     
     def parseTokens(self, tokens):
-        for token in tokens:
+        tokens_gen = (t for t in tokens) #make sure tokens is a generator, not a list
+        for token in tokens_gen:
             try:
-                yield SExpression.parseTokens(token, tokens, topLevel=True)
+                yield SExpression.parseTokens(token, tokens_gen, topLevel=True)
             except SchemeError as e:
                 yield ErrorExpression.make(e)
             

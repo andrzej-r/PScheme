@@ -931,7 +931,7 @@ class Trampolined(SExpression):
         return self.continuation(self.operand)
 
     def __str__(self):
-        return '#<trampolined (%) 0x%x>' % (str(self.operand), id(self))
+        return '#<trampolined (%s) 0x%x>' % (str(self.operand), id(self))
 
 class SpecialSyntax(SExpression):
     object = None

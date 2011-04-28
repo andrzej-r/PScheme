@@ -1289,6 +1289,8 @@ class PrimitiveProcedure(Procedure):
 
     primitiveFunctions = {
         'null?':        lambda: IsNullProcedure.make(),
+        'pair?':        lambda: IsPairProcedure.make(),
+        'procedure?':   lambda: IsProcedureProcedure.make(),
         'eq?':          lambda: EqProcedure.make(),
         'eqv?':         lambda: EqvProcedure.make(),
         'equal?':       lambda: EqualProcedure.make(),
@@ -1331,6 +1333,20 @@ class IsNullProcedure(PrimitiveProcedure):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
         return Trampolined.make(cont, Boolean.make(operands.car.isNull()))
+
+class IsPairProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`pair?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+        return Trampolined.make(cont, Boolean.make(operands.car.isPair()))
+
+class IsProcedureProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`procedure?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+        return Trampolined.make(cont, Boolean.make(operands.car.isProcedure()))
 
 class ConsProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cons` primitive function."

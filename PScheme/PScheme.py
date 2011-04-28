@@ -845,8 +845,8 @@ class Continuation(Procedure):
         
     def apply(self, operands, callingForm, cont = None):
         if len(operands) != 1:
-            raise SchemeError(callingForm, 'Wrong number of operands, required 1, provided ' + str(len(operands)) + '.')
-        return Trampolined(operands.car)
+            raise SchemeError(callingForm, 'Wrong number of operands to continuation, required 1, provided ' + str(len(operands)) + '.')
+        return Trampolined.make(self.continuation, operands.car)
     
     def __str__(self):
         return '#<continuation 0x%x>' % id(self)

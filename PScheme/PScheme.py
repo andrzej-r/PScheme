@@ -1210,7 +1210,7 @@ class SetForm(SpecialSyntax):
         var = operands.car
         if not var.isSymbol():
             raise SchemeError(callingForm, '"set!" first operand is not a symbol.')
-        targetFrame = frame.resolveSymbolLocation(var.name)
+        targetFrame = frame.resolveSymbolLocation(var)
         if targetFrame == None:
             raise SchemeError(callingForm, '"set!" undefined symbol' + var.name + '.')
         def step2(value):

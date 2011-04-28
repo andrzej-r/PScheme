@@ -1172,9 +1172,11 @@ class LetrecForm(SpecialSyntax):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"letrec" requires at least 2 operands, ' + str(len(operands)) + ' given.')
         def step2(newFrame):
-            def step3(newFrame2):
-                return operands.cdr.evalSequence(newFrame2, cont)
-            return self.processBindingValues(operands.car, callingForm, newFrame, step3)
+            def step3(inits):
+                def step4(newFrame2):
+                    return operands.cdr.evalSequence(newFrame2, cont)
+                return self.bindValues(operands.car, inits, callingForm, newFrame, step4)
+            return self.evalInits(operands.car, callingForm, newFrame, step3)
         return self.processBindingVariables(operands.car, callingForm, frame, Frame(frame), step2)
         
     def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
@@ -1193,14 +1195,23 @@ class LetrecForm(SpecialSyntax):
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         #return binding.cdr.car.eval(oldFrame, step2)
 
-    def processBindingValues(self, bindings, callingForm, frame, cont):
-        def step2(bindingValue):
-            frame.symbols[binding.car.name] = bindingValue
-            return self.processBindingValues(bindings.cdr, callingForm, frame, cont)
+    def evalInits(self, bindings, callingForm, frame, cont):
+        def step2(initValue):
+            def step3(initValues):
+                return Trampolined.make(cont, Pair.make(initValue, initValues))
+            return self.evalInits(bindings.cdr, callingForm, frame, step3)
+        if bindings.isNull():
+            return Trampolined.make(cont, Null.make())
+        return bindings.car.cdr.car.eval(frame, step2)
+
+    def bindValues(self, bindings, inits, callingForm, frame, cont):
         if bindings.isNull():
             return Trampolined.make(cont, frame)
-        binding = bindings.car
-        return binding.cdr.car.eval(frame, step2)
+        binding = bindings.car.car
+        init = inits.car
+        frame.symbols[binding.name] = init
+        return self.bindValues(bindings.cdr, inits.cdr, callingForm, frame, cont)
+
 
 class SetForm(SpecialSyntax):
     "Implements a :c:macro:`set!` form."

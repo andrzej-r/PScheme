@@ -260,7 +260,32 @@ class PSchemeTest(unittest.TestCase):
                       (even? (- n 1))))))
         (even? 88))        """
         self.assertEqual(self.tpes(s), ['#t'])
-        
+
+    def test_r5rs_pitfalls(self):
+        "from http://sisc-scheme.org/r5rs_pitfall.scm"
+        s = """
+ (let ((cont #f))
+   (letrec ((x (call-with-current-continuation (lambda (c) (set! cont c) 0)))
+            (y (call-with-current-continuation (lambda (c) (set! cont c) 0))))
+     (if cont
+         (let ((c cont))
+           (set! cont #f)
+           (set! x 1)
+           (set! y 1)
+           (c 0))
+         (+ x y))))
+        """
+        self.assertEqual(self.tpes(s), ['0'])
+
+        s = """
+  (letrec ((x (call/cc list)) (y (call/cc list)))
+    (cond ((procedure? x) (x (pair? y)))
+	  ((procedure? y) (y (pair? x))))
+    (let ((x (car x)) (y (car y)))
+      (and (call/cc x) (call/cc y) (call/cc x))))
+        """
+        self.assertEqual(self.tpes(s), ['#t'])
+
     def test_quasiquotation(self):
         "from R5RS 4.2.6"
         self.assertEqual(self.tpes("`(list ,(+ 1 2) 4)"), ['(list 3 4)'])

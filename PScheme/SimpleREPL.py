@@ -69,11 +69,11 @@ def flush(generator):
 def output(results):
     """
     Reads and displays *results*. *Results* are a generator and each chunk
-    is expected to implement a meaningful :meth:`__str__` method.
+    is expected to implement a meaningful :meth:`__repr__` method.
     """
     for result in results:
         if not isinstance(result, PScheme.Nil):
-            print(result)
+            print(repr(result))
             
 def repl():
     """

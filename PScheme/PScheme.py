@@ -264,8 +264,25 @@ class Nil(SelfEval):
 
 class Char(SelfEval):
     __slots__ = []
-    pchar = re.compile(r'^#\\(.+)$', flags)
+    pchar = re.compile(r'^#\\(.)$', flags)
+    pcharcode = re.compile(r'^#\\[xX]([0-9a-fA-F]+)$', flags)
 
+    name2char = {
+        '#\\ ': ' ',
+        '#\\space': ' ',
+        '#\\tab': '\t',
+        '#\\newline': '\n',
+        '#\\return': '\r',
+        '#\\null': '\x00',
+        '#\\alarm': '\a',
+        '#\\backspace': '\b',
+        '#\\escape': '\x1b',
+        '#\\delete': '\x7f',
+        }
+    
+    char2name = dict(zip(name2char.values(), name2char.keys()))
+    #print(name2char)
+    #print(char2name)
     cache = {}
     
     @classmethod
@@ -281,22 +298,35 @@ class Char(SelfEval):
     def parseToken(cls, token, tokens=[]):
         #match = cls.pchar.match(token.text)
         #char = cls.make(match.group(1))
-        char = cls.make(token.text)
+        char = cls.pchar.match(token.text)
+        charCode = cls.pcharcode.match(token.text)
+        if token.text in cls.name2char:
+            string = cls.name2char[token.text]
+        elif char != None:
+            string = char.group(1)
+        elif charCode != None:
+            code = int(charCode.group(1), 16)
+            if code > 0x10ffff:
+                raise SchemeError(token, 'Invalid character code.')
+            string = chr(code)
+        else:
+            raise SchemeError(token, 'Unknown character name.')
+        char = cls.make(string)
         #char.meta = token.meta
         return char
 
     def isChar(self):
         return True
         
-    def __str__(self):
-        string = self.pchar.match(self.value).group(1)
-        if (string == 'newline'):
-            return "\n"
-        if (string == 'space'):
-            return " "
-        return string
-        
     def __repr__(self):
+        char = self.value
+        if char in self.char2name:
+            return self.char2name[char]
+        if 32 <= char < 127:
+            return '#\\' + char
+        return '#\\%x' % ord(char)
+        
+    def __str__(self):
         return self.value
 
     def __eq__(self, other):

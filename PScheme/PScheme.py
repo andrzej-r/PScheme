@@ -1141,6 +1141,8 @@ class LetForm(SpecialSyntax):
             return self.processBindings(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
+        if not bindings.isPair():
+            raise SchemeError(callingForm, '"%s": invalid binding forms (not a list).' % self.name)
         binding = bindings.car
         if not binding.isPair():
             raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
@@ -1168,6 +1170,8 @@ class LetStarForm(SpecialSyntax):
             return self.processBindings(bindings.cdr, callingForm, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, frame)
+        if not bindings.isPair():
+            raise SchemeError(callingForm, '"%s": invalid binding forms (not a list).' % self.name)
         binding = bindings.car
         if not binding.isPair():
             raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
@@ -1191,6 +1195,8 @@ class LetrecForm(SpecialSyntax):
     def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
+        if not bindings.isPair():
+            raise SchemeError(callingForm, '"%s": invalid binding forms (not a list).' % self.name)
         binding = bindings.car
         if not binding.isPair():
             raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
@@ -1235,6 +1241,8 @@ class LetrecStarForm(SpecialSyntax):
     def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
+        if not bindings.isPair():
+            raise SchemeError(callingForm, '"%s": invalid binding forms (not a list).' % self.name)
         binding = bindings.car
         if not binding.isPair():
             raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)

@@ -306,9 +306,13 @@ class Char(SelfEval):
             string = char.group(1)
         elif charCode != None:
             code = int(charCode.group(1), 16)
-            if code > 0x10ffff:
+            try:
+                if sys.version_info[0] == 2:
+                    string = unichr(code)
+                else:
+                    string = chr(code)
+            except ValueError:
                 raise SchemeError(token, 'Invalid character code.')
-            string = chr(code)
         else:
             raise SchemeError(token, 'Unknown character name.')
         char = cls.make(string)
@@ -322,11 +326,19 @@ class Char(SelfEval):
         char = self.value
         if char in self.char2name:
             return self.char2name[char]
-        if 32 <= char < 127:
+        if 32 <= ord(char) < 127:
             return '#\\' + char
-        return '#\\%x' % ord(char)
+        if ord(char) < 256:
+            return '#\\x%02x' % ord(char)
+        if ord(char) < 256*256:
+            return '#\\x%04x' % ord(char)
+        else:
+            return '#\\x%06x' % ord(char)
         
     def __str__(self):
+        return self.value
+
+    def __unicode__(self):
         return self.value
 
     def __eq__(self, other):
@@ -1777,7 +1789,10 @@ class WriteCharProcedure(PrimitiveProcedure):
             raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
         if not operands.car.isChar():
             raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
-        sys.stdout.write(str(operands.car))
+        if sys.version_info[0] == 2:
+            sys.stdout.write(unicode(operands.car).encode('utf-8'))
+        else:
+            sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
 class DisplayProcedure(PrimitiveProcedure):
@@ -1785,7 +1800,10 @@ class DisplayProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
-        sys.stdout.write(str(operands.car))
+        if sys.version_info[0] == 2:
+            sys.stdout.write(unicode(operands.car).encode('utf-8'))
+        else:
+            sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
 class Apply2Procedure(PrimitiveProcedure):

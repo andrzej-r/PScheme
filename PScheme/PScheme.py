@@ -347,23 +347,22 @@ class Char(SelfEval):
         
 class String(SelfEval):
     __slots__ = []
-    flags2 = flags #| re.M
     pstring = re.compile(r'^\"((?:[^"]|\")*)\"$', flags)
-    p1  = re.compile(r'\\\\', flags2)
-    p2  = re.compile(r'\\"', flags2)
-    p3  = re.compile(r'\\a', flags2)
-    p4  = re.compile(r'\\f', flags2)
-    p5  = re.compile(r'\\n', flags2)
-    p6  = re.compile(r'\\r', flags2)
-    p7  = re.compile(r'\\t', flags2)
-    p8  = re.compile(r'\\v', flags2)
-    p9  = re.compile(r'\\b', flags2)
-    p10 = re.compile(r'\\0', flags2)
-    #p11 = re.compile(r'\\\n', flags2)
-    p30 = re.compile(r'\\x([0-9a-fA-F]{2})', flags2)
-    p31 = re.compile(r'\\u([0-9a-fA-F]{4})', flags2)
-    p32 = re.compile(r'\\U([0-9a-fA-F]{6})', flags2)
+    pcharcode = re.compile(r'\\[xX]([0-9a-fA-F]+);', flags)
     
+    name2char = {
+        r'\a':     '\a',
+        r'\b':     '\b',
+        r'\t':     '\t',
+        r'\n':     '\n',
+        r'\r':     '\r',
+        r'\"':     '\"',
+        r'\\':    '\\',
+        }
+    
+    char2name = dict(zip(name2char.values(), name2char.keys()))
+    pchar = re.compile(r'(\\a|\\b|\\t|\\n|\\r|\\"|\\\\|(?:\\[xX][0-9a-zA-Z]+;)|(?:.))', flags)
+
     @classmethod
     def make(cls, string):
         self = cls()
@@ -372,36 +371,52 @@ class String(SelfEval):
 
     @classmethod
     def parseToken(cls, token, tokens=[]):
-        match = cls.pstring.match(token.text)
-        string = cls.make(match.group(1))
-        return string
+        string = ''
+        s = cls.pstring.match(token.text).group(1)
+        for charMatch in cls.pchar.finditer(s):
+            charName = charMatch.group(0)
+            charCode = cls.pcharcode.match(charName)
+            if charName in cls.name2char:
+                string += cls.name2char[charName]
+            elif charCode != None:
+                print('char', charName, charCode.group(1))
+                code = int(charCode.group(1), 16)
+                try:
+                    if sys.version_info[0] == 2:
+                        string += unichr(code)
+                    else:
+                        string += chr(code)
+                except ValueError:
+                    raise SchemeError(token, 'Invalid character code.')
+            else:
+                string += charName
+        return cls.make(string)
 
     def isString(self):
         return True
         
-    #def __str__(self):
-    #    return unicode(self)
-        
-    def __str__(self):
-        s = self.value
-        s = self.p1.sub(r'\\', s)
-        s = self.p2.sub('\"', s)
-        s = self.p3.sub('\a', s)
-        s = self.p4.sub('\f', s)
-        s = self.p5.sub('\n', s)
-        s = self.p6.sub('\r', s)
-        s = self.p7.sub('\t', s)
-        s = self.p8.sub('\v', s)
-        s = self.p9.sub('\b', s)
-        s = self.p10.sub('\0', s)
-        s = self.p30.sub(lambda match: unichr(int(match.group(1), 16)), s)
-        s = self.p31.sub(lambda match: unichr(int(match.group(1), 16)), s)
-        s = self.p32.sub(lambda match: unichr(int(match.group(1), 16)), s)
-        #s.encode('cp932')
-        return s
-
     def __repr__(self):
-        return '"' + self.value + '"'
+        s = self.value
+        string = '\"'
+        for char in self.value:
+            if char in self.char2name:
+                string += self.char2name[char]
+            elif 32 <= ord(char) < 127:
+                string += char
+            elif ord(char) < 256:
+                string += '\\x%02x;' % ord(char)
+            elif ord(char) < 256*256:
+                string += '\\x%04x;' % ord(char)
+            else:
+                string += '\\x%06x;' % ord(char)
+        string += '\"'
+        return string
+
+    def __str__(self):
+        return self.value
+
+    def __unicode__(self):
+        return self.value
 
     def __eq__(self, other):
         return (other is self) or (type(other) == type(self) and other.value == self.value)

@@ -703,7 +703,7 @@ class Pair(SExpression):
             if not operator.isProcedure():
                 raise SchemeError(self, 'procedure application, first operand is not a procedure.')
             return self.cdr.evalElements(frame, step3, SchemeError(self, '"eval": improper operand list'))
-        if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms:
+        if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms and frame.resolveSymbolLocation(self.car) == None:
             return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
         return self.car.eval(frame, step2)
 

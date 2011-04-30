@@ -260,7 +260,21 @@ class PSchemeTest(unittest.TestCase):
                       (even? (- n 1))))))
         (even? 88))        """
         self.assertEqual(self.tpes(s), ['#t'])
-
+        s = """
+(letrec* ((p
+            (lambda (x)
+              (+ 1 (q (- x 1)))))
+          (q
+            (lambda (y)
+              (if (zero? y)
+                  0
+                  (+ 1 (p (- y 1))))))
+          (x (p 5))
+          (y x))
+    y)
+        """
+        self.assertEqual(self.tpes(s), ['5'])
+        
     def test_r5rs_pitfalls(self):
         "from http://sisc-scheme.org/r5rs_pitfall.scm"
         s = """

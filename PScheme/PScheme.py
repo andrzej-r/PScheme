@@ -946,6 +946,7 @@ class SpecialSyntax(SExpression):
         'let':              lambda: LetForm.make(),
         'let*':             lambda: LetStarForm.make(),
         'letrec':           lambda: LetrecForm.make(),
+        'letrec*':          lambda: LetrecStarForm.make(),
         'set!':             lambda: SetForm.make(),
         'set-car!':         lambda: SetCarForm.make(),
         'set-cdr!':         lambda: SetCdrForm.make(),
@@ -1211,6 +1212,40 @@ class LetrecForm(SpecialSyntax):
         init = inits.car
         frame.symbols[binding.name] = init
         return self.bindValues(bindings.cdr, inits.cdr, callingForm, frame, cont)
+
+class LetrecStarForm(SpecialSyntax):
+    "Implements a :c:macro:`letrec*` form."
+    def apply(self, operands, callingForm, frame, cont):
+        if operands.isNull() or operands.cdr.isNull():
+            raise SchemeError(callingForm, '"letrec*" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+        def step2(newFrame):
+            def step3(newFrame2):
+                return operands.cdr.evalSequence(newFrame2, cont)
+            return self.evalInits(operands.car, callingForm, newFrame, step3)
+        return self.processBindingVariables(operands.car, callingForm, frame, Frame(frame), step2)
+        
+    def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
+        if bindings.isNull():
+            return Trampolined.make(cont, newFrame)
+        binding = bindings.car
+        if not binding.isPair():
+            raise SchemeError(callingForm, '"letrec*": invalid binding form (not a list).')
+        if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
+            raise SchemeError(callingForm, '"letrec*": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+        if not binding.car.isSymbol():
+            raise SchemeError(callingForm, '"letrec*": incorrect binding form (first element is not a symbol).')
+        if binding.car.name in newFrame.symbols:
+            raise SchemeError(callingForm, '"letrec*": multiple uses of the same variable in the binding form.')
+        newFrame.symbols[binding.car.name] = Nil.make()
+        return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
+
+    def evalInits(self, bindings, callingForm, frame, cont):
+        def step2(bindingValue):
+            frame.symbols[bindings.car.car.name] = bindingValue
+            return self.evalInits(bindings.cdr, callingForm, frame, cont)
+        if bindings.isNull():
+            return Trampolined.make(cont, frame)
+        return bindings.car.cdr.car.eval(frame, step2)
 
 
 class SetForm(SpecialSyntax):

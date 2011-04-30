@@ -704,7 +704,7 @@ class Pair(SExpression):
                 raise SchemeError(self, 'procedure application, first operand is not a procedure.')
             return self.cdr.evalElements(frame, step3, SchemeError(self, '"eval": improper operand list'))
         if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms:
-            return SpecialSyntax.specialForms[self.car.name]().apply(self.cdr, self, frame, cont)
+            return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
         return self.car.eval(frame, step2)
 
     def evalElements(self, frame, cont, excp=None):
@@ -964,6 +964,14 @@ class SpecialSyntax(SExpression):
             cls.object = cls()
         return cls.object
             
+    @classmethod
+    def resolveSymbol(cls, symbol):
+        if not symbol.name in cls.specialForms:
+            raise SchemeError(callingForm, 'Undefined primitive function %s.' % symbol.name)
+        form = cls.specialForms[symbol.name]()
+        form.name = symbol.name
+        return form
+
     def eval(self, frame, cont):
         raise SchemeError(self, 'Special syntax should not be evaluated directly')
     
@@ -974,7 +982,7 @@ class SpecialSyntax(SExpression):
         return True
         
     def __str__(self):
-        return '#<%s>' % self.__class__.__name__
+        return '#<%s>' % self.name
     
 class QuoteForm(SpecialSyntax):
     "Implements a :c:macro:`quote` or :c:macro:`'` form."
@@ -1370,8 +1378,16 @@ class PrimitiveProcedure(Procedure):
             cls.object = cls()
         return cls.object
     
+    @classmethod
+    def resolveSymbol(cls, symbol):
+        if not symbol.name in cls.primitiveFunctions:
+            raise SchemeError(callingForm, 'Undefined primitive function %s.' % symbol.name)
+        function = cls.primitiveFunctions[symbol.name]()
+        function.name = symbol.name
+        return function
+
     def __str__(self):
-        return '#<%s>' + self.__class__.__name__
+        return '#<primitive:%s>' % self.name
     
 class IsNullProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`null?` primitive function."
@@ -1771,8 +1787,7 @@ class Frame(SExpression):
         elif self.parentFrame:
             return self.parentFrame.resolveSymbol(symbol)
         elif symbol.name in PrimitiveProcedure.primitiveFunctions:
-            return PrimitiveProcedure.primitiveFunctions[symbol.name]()
-            #return symbol
+            return PrimitiveProcedure.resolveSymbol(symbol)
         else:
             raise SchemeError(symbol, 'Undefined symbol "' + symbol.name + '"')
 

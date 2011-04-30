@@ -988,7 +988,7 @@ class QuoteForm(SpecialSyntax):
     "Implements a :c:macro:`quote` or :c:macro:`'` form."
     def apply(self, operands, callingForm, frame, cont = None):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"quote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, given %d.' % (self.name, len(operands)))
         res = operands.car
         return Trampolined.make(cont, res)
 
@@ -1026,7 +1026,7 @@ class QuasiQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont = None):
         def step2(expr):
             if expr.isPair() and expr.unquoteSplice:
-                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "quasiquote".')
+                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
             if callingForm.quasiquoteLevel == 1:
                 return Trampolined.make(cont, expr)
             else:
@@ -1035,7 +1035,7 @@ class QuasiQuoteForm(QuotedForm):
                 form.quasiquoteLevel = callingForm.quasiquoteLevel
                 return Trampolined.make(cont, form)
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"quasiquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, given %d.' % (self.name, len(operands)))
         callingForm.quasiquoteLevel += 1
         return self.processExpression(operands.car, callingForm, frame, step2)
             
@@ -1044,16 +1044,16 @@ class UnQuoteForm(QuotedForm):
     def apply(self, operands, callingForm, frame, cont):
         def step2(expr):
             if expr.isPair() and expr.unquoteSplice:
-                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "unquote".')
+                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
             form = Pair.makeFromList([Symbol.make("unquote"), expr])
             form.meta = callingForm.meta
             form.quasiquoteLevel = callingForm.quasiquoteLevel
             return Trampolined.make(cont, form)
         callingForm.quasiquoteLevel -= 1
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"unquote" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, given. %d' % (self.name, len(operands)))
         if callingForm.quasiquoteLevel < 0:
-            raise SchemeError(callingForm, '"unquote" outside of "quasiquote".')
+            raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
         if callingForm.quasiquoteLevel == 0:
             return operands.car.eval(frame, cont)
         else:
@@ -1070,16 +1070,16 @@ class UnQuoteSplicingForm(QuotedForm):
             return Trampolined.make(cont, res)
         def expanded(expr):
             if expr.isPair() and expr.unquoteSplice:
-                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "unquote-splicing".')
+                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
             form = Pair.makeFromList([Symbol.make("unquote-splicing"), expr])
             form.meta = callingForm.meta
             form.quasiquoteLevel = callingForm.quasiquoteLevel
             return Trampolined.make(cont, form)
         callingForm.quasiquoteLevel -= 1
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"unquote-splicing" requires 1 operand, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, given. %d' % (self.name, len(operands)))
         if callingForm.quasiquoteLevel < 0:
-            raise SchemeError(callingForm, '"unquote-splicing" outside of "quasiquote".')
+            raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
         if callingForm.quasiquoteLevel == 0:
             return operands.car.eval(frame, evaluated)
         else:
@@ -1091,10 +1091,10 @@ class DefineForm(SpecialSyntax):
         #if not self.topLevel: # and not self.inBody:
         #    raise SchemeError(self, '"define" only allowed at the top level or in a body of a procedure')
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"define" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         firstArg = operands.car
         if not firstArg.isSymbol() and not firstArg.isPair():
-            raise SchemeError(callingForm, '"define": Invalid type of the first operand')
+            raise SchemeError(callingForm, '"%s": Invalid type of the first operand' % self.name)
         if firstArg.isSymbol():
             def step2(value):
                 frame.addSymbol(firstArg, value)
@@ -1102,7 +1102,7 @@ class DefineForm(SpecialSyntax):
             return operands.cdr.car.eval(frame, step2)
         if firstArg.isPair():
             if not firstArg.car.isSymbol():
-                raise SchemeError(callingForm, 'Invalid procedure name in "define"')
+                raise SchemeError(callingForm, 'Invalid procedure name in "%s"' % self.name)
             procName = firstArg.car
             formals = firstArg.cdr #.toList()
             body = operands.cdr
@@ -1114,10 +1114,10 @@ class LambdaForm(SpecialSyntax):
     "Implements a :c:macro:`lambda` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"lambda" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         formals = operands.car
         if not formals.isSymbol() and not formals.isPair() and not formals.isNull():
-            raise SchemeError(callingForm, '"lambda": Invalid type of the first operand')
+            raise SchemeError(callingForm, '"%s": Invalid type of the first operand' % self.name)
         body = operands.cdr
         procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
         return Trampolined.make(cont, procedure)
@@ -1126,7 +1126,7 @@ class LetForm(SpecialSyntax):
     "Implements a :c:macro:`let` form. Named :c:macro:`let` not yet supported."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"let" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
             return operands.cdr.evalSequence(newFrame, cont)
         return self.processBindings(operands.car, callingForm, frame, Frame(frame), step2)
@@ -1134,25 +1134,25 @@ class LetForm(SpecialSyntax):
     def processBindings(self, bindings, callingForm, oldFrame, newFrame, cont):
         def step2(bindingValue):
             if not binding.car.isSymbol():
-                raise SchemeError(callingForm, '"let": incorrect binding form (first element is not a symbol).')
+                raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
             if binding.car.name in newFrame.symbols:
-                raise SchemeError(callingForm, '"let": multiple uses of the same variable in the binding form.')
+                raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
             newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
         binding = bindings.car
         if not binding.isPair():
-            raise SchemeError(callingForm, '"let": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"let": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"%s": each binding form must consist of 2 elements, given %d.' % (self.name, len(binding)))
         return binding.cdr.car.eval(oldFrame, step2)
 
 class LetStarForm(SpecialSyntax):
     "Implements a :c:macro:`let*` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"let*" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
             return operands.cdr.evalSequence(newFrame, cont)
         return self.processBindings(operands.car, callingForm, frame, step2)
@@ -1160,9 +1160,9 @@ class LetStarForm(SpecialSyntax):
     def processBindings(self, bindings, callingForm, frame, cont):
         def step2(bindingValue):
             if not binding.car.isSymbol():
-                raise SchemeError(callingForm, '"let*": incorrect binding form (first element is not a symbol).')
+                raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
             #if binding.car.name in newFrame.symbols:
-            #    raise SchemeError(callingForm, '"let*": multiple uses of the same variable in the binding form.')
+            #    raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
             newFrame = Frame(frame)
             newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, newFrame, cont)
@@ -1170,16 +1170,16 @@ class LetStarForm(SpecialSyntax):
             return Trampolined.make(cont, frame)
         binding = bindings.car
         if not binding.isPair():
-            raise SchemeError(callingForm, '"let*": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"let*": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"%s": each binding form must consist of 2 elements, given %d.' % (self.name, len(binding)))
         return binding.cdr.car.eval(frame, step2)
 
 class LetrecForm(SpecialSyntax):
     "Implements a :c:macro:`letrec` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"letrec" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
             def step3(inits):
                 def step4(newFrame2):
@@ -1193,13 +1193,13 @@ class LetrecForm(SpecialSyntax):
             return Trampolined.make(cont, newFrame)
         binding = bindings.car
         if not binding.isPair():
-            raise SchemeError(callingForm, '"letrec": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"letrec": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"%s": each binding form must consist of 2 elements, given %d.' % (self.name, len(binding)))
         if not binding.car.isSymbol():
-            raise SchemeError(callingForm, '"letrec": incorrect binding form (first element is not a symbol).')
+            raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
         if binding.car.name in newFrame.symbols:
-            raise SchemeError(callingForm, '"letrec": multiple uses of the same variable in the binding form.')
+            raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
         newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         #return binding.cdr.car.eval(oldFrame, step2)
@@ -1225,7 +1225,7 @@ class LetrecStarForm(SpecialSyntax):
     "Implements a :c:macro:`letrec*` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"letrec*" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
             def step3(newFrame2):
                 return operands.cdr.evalSequence(newFrame2, cont)
@@ -1237,13 +1237,13 @@ class LetrecStarForm(SpecialSyntax):
             return Trampolined.make(cont, newFrame)
         binding = bindings.car
         if not binding.isPair():
-            raise SchemeError(callingForm, '"letrec*": invalid binding form (not a list).')
+            raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"letrec*": each binding form must consist of 2 elements, ' + str(len(binding)) + ' given.')
+            raise SchemeError(callingForm, '"%s": each binding form must consist of 2 elements, given %d.' % (self.name, len(binding)))
         if not binding.car.isSymbol():
-            raise SchemeError(callingForm, '"letrec*": incorrect binding form (first element is not a symbol).')
+            raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
         if binding.car.name in newFrame.symbols:
-            raise SchemeError(callingForm, '"letrec*": multiple uses of the same variable in the binding form.')
+            raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
         newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
 
@@ -1260,13 +1260,13 @@ class SetForm(SpecialSyntax):
     "Implements a :c:macro:`set!` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"set!" requires 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, given %d.' % (self.name, len(operands)))
         var = operands.car
         if not var.isSymbol():
-            raise SchemeError(callingForm, '"set!" first operand is not a symbol.')
+            raise SchemeError(callingForm, '"%s": first operand is not a symbol.' % self.name)
         targetFrame = frame.resolveSymbolLocation(var)
         if targetFrame == None:
-            raise SchemeError(callingForm, '"set!" undefined symbol' + var.name + '.')
+            raise SchemeError(callingForm, '"%s": undefined symbol %s.' % (self.name, var.name))
         def step2(value):
             targetFrame[var.name] = value
             return Trampolined.make(cont, Nil.make())
@@ -1276,7 +1276,7 @@ class IfForm(SpecialSyntax):
     "Implements a :c:macro:`if` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isNull() or (operands.cdr.cdr.isPair() and operands.cdr.cdr.cdr.isPair()):
-            raise SchemeError(callingForm, '"if" requires 2 or 3 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires 2 or 3 operands, given %d.' % (self.name, len(operands)))
         def step2(predicate):
             if not predicate.isBoolean() or predicate.value: #True
                 res = operands.cdr.car.eval(frame, cont)
@@ -1291,7 +1291,7 @@ class CondForm(SpecialSyntax):
     "Implements a :c:macro:`cond` form."
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull():
-            raise SchemeError(callingForm, '"cond" requires at least 2 operands, ' + str(len(operands)) + ' given.')
+            raise SchemeError(callingForm, '"%s" requires at least 1 operand, given %d.' % (self.name, len(operands)))
         def step2(clause):
             if clause.isPair():
                 return clause.cdr.car.eval(frame, cont)
@@ -1304,7 +1304,7 @@ class CondForm(SpecialSyntax):
             return Trampolined.make(cont, Nil.make())
         clause = clauses.car
         if not clause.isPair() or not clause.cdr.isPair() or not clause.cdr.cdr.isNull():
-            raise SchemeError(clause, '"cond": invalid clause format.')
+            raise SchemeError(clause, '"%s": invalid clause format.' % self.name)
         def step2(boolValue):
             if (not boolValue.isBoolean() or boolValue.value == True):
                 return Trampolined.make(cont, clause)
@@ -1393,28 +1393,28 @@ class IsNullProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`null?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.' % (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isNull()))
 
 class IsPairProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`pair?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isPair()))
 
 class IsProcedureProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`procedure?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"null?" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isProcedure()))
 
 class ConsProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cons` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"cons" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         expr1 = operands.car
         expr2 = operands.cdr.car
         res = Pair.make(expr1, expr2)
@@ -1424,10 +1424,10 @@ class CarProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`car` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"car" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         arg = operands.car
         if not arg.isPair():
-            raise SchemeError(callingForm, '"car" operand must be a pair.')
+            raise SchemeError(callingForm, '"%s" operand must be a pair.' % self.name)
         res = arg.car
         return Trampolined.make(cont, res)
 
@@ -1435,10 +1435,10 @@ class CdrProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cdr` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"cdr" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         arg = operands.car
         if not arg.isPair():
-            raise SchemeError(callingForm, '"cdr" operand must be a pair.')
+            raise SchemeError(callingForm, '"%s" operand must be a pair.' % self.name)
         res = arg.cdr
         return Trampolined.make(cont, res)
             
@@ -1446,11 +1446,11 @@ class Append2Procedure(PrimitiveProcedure):
     "Implements a two-argument :c:macro:`append` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"append2" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         expr1 = operands.car
         expr2 = operands.cdr.car
         if (not expr1.isNull() and not expr1.isPair()) or (not expr2.isNull() and not expr2.isPair()):
-            raise SchemeError(callingForm, '"append2": operands must be lists.')
+            raise SchemeError(callingForm, '"%s": operands must be lists.' % self.name)
         res = expr1.append(expr2)
         return Trampolined.make(cont, res)
 
@@ -1458,7 +1458,7 @@ class NotProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`not` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"not" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         arg = operands.car
         value = False
         if arg.isBoolean():
@@ -1470,7 +1470,7 @@ class EqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`eq?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"eq?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1489,7 +1489,7 @@ class EqvProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`eqv?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"eqv?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1513,7 +1513,7 @@ class EqualProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`equal?` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"equal?" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1528,16 +1528,16 @@ class NumEqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`=` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         if not first.isNumber():
-            raise SchemeError(callingForm, '"=": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise SchemeError(callingForm, '"=": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if n.value != first.value:
                 value = False
             cdr = cdr.cdr
@@ -1548,16 +1548,16 @@ class NumLTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`<` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"<" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise SchemeError(callingForm, '"<": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise SchemeError(callingForm, '"<": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value >= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1569,16 +1569,16 @@ class NumLTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`<=` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"<=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise SchemeError(callingForm, '"<=": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise SchemeError(callingForm, '"<=": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value > n.value:
                 value = False
             cdr = cdr.cdr
@@ -1590,16 +1590,16 @@ class NumGTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`>` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '">" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise SchemeError(callingForm, '">": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise SchemeError(callingForm, '">": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value <= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1611,16 +1611,16 @@ class NumGTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`>=` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '">=" requires at least 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
         if not previous.isNumber():
-            raise SchemeError(callingForm, '">=": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
             if not n.isNumber():
-                raise SchemeError(callingForm, '">=": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value < n.value:
                 value = False
             cdr = cdr.cdr
@@ -1634,7 +1634,7 @@ class SumProcedure(PrimitiveProcedure):
         value = 0
         for n in operands:
             if not n.isNumber():
-                raise SchemeError(callingForm, '"+": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             value += n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1643,16 +1643,16 @@ class SubtractProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`-` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull():
-            raise SchemeError(callingForm, '"-" requires at least 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, len(operands)))
         if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"-": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.isNull():
             res = Number.make(-operands.car.value)
         else:
             value = operands.car.value
             for n in operands.cdr:
                 if not n.isNumber():
-                    raise SchemeError(callingForm, '"-": operand is not a Number')
+                    raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
                 value -= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1663,7 +1663,7 @@ class MultiplyProcedure(PrimitiveProcedure):
         value = 1
         for n in operands:
             if not n.isNumber():
-                raise SchemeError(callingForm, '"*": operand is not a Number')
+                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             value *= n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1672,18 +1672,18 @@ class DivideProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`/` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull():
-            raise SchemeError(callingForm, '"/" requires at least 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, len(operands)))
         if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"/": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.isNull():
             res = Number.make(1.0/operands[0].value)
         else:
             value = float(operands.car.value)
             for n in operands.cdr:
                 if not n.isNumber():
-                    raise SchemeError(callingForm, '"/": operand is not a Number')
+                    raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
                 if n.value == 0:
-                    raise SchemeError(callingForm, '"/": division by 0')
+                    raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
                 value /= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1692,13 +1692,13 @@ class ModuloProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`modulo` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"modulo" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"modulo": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if not operands.cdr.car.isNumber():
-            raise SchemeError(callingForm, '"modulo": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.car.value == 0:
-            raise SchemeError(callingForm, '"modulo": division by 0')
+            raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
         res = Number.make(operands.car.value % operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
@@ -1706,13 +1706,13 @@ class RemainderProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`remainder` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"remainder" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"remainder": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if not operands.cdr.car.isNumber():
-            raise SchemeError(callingForm, '"remainder": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.car.value == 0:
-            raise SchemeError(callingForm, '"remainder": division by 0')
+            raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
         dividend = operands.car.value
         divisor = operands.cdr.car.value
         res = Number.make(dividend - divisor*int(float(dividend)/divisor))
@@ -1722,13 +1722,13 @@ class QuotientProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`quotient` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"quotient" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"quotient": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if not operands.cdr.car.isNumber():
-            raise SchemeError(callingForm, '"quotient": operand is not a Number')
+            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.car.value == 0:
-            raise SchemeError(callingForm, '"quotient": division by 0')
+            raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
         res = Number.make(operands.car.value // operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
@@ -1736,9 +1736,9 @@ class WriteCharProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`write-char` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise SchemeError(callingForm, '"write-char" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
         if not operands.car.isChar():
-            raise SchemeError(callingForm, '"write-char": operand is not a Character')
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
@@ -1746,7 +1746,7 @@ class DisplayProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`display` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise SchemeError(callingForm, '"display" requires 1 or 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
         sys.stdout.write(str(operands.car))
         return Trampolined.make(cont, Nil.make())
 
@@ -1754,23 +1754,23 @@ class Apply2Procedure(PrimitiveProcedure):
     "Implements a two-argument :c:macro:`apply2` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"apply2" requires 2 operands, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         procedure = operands.car
         if not procedure.isProcedure():
-            raise SchemeError(callingForm, '"apply2": first operand must be a procedure.')
+            raise SchemeError(callingForm, '"%s": first operand is not a procedure.' % self.name)
         operands = operands.cdr.car
         #if not operands.isNull() and not operands.isPair():
         if not operands.isList():
-            raise SchemeError(callingForm, '"apply2": second operand must be a list.')
+            raise SchemeError(callingForm, '"%s": second operand is not a list.' % self.name)
         return procedure.apply(operands, callingForm, cont)
 
 class CallCCProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`call/cc` or :c:macro:`call-with-current-continuation` primitive function."
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"call/cc" requires 1 operand, provided ' + str(len(operands)) + '.')
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         if not operands.car.isProcedure():
-            raise SchemeError(callingForm, '"call/cc": operand must be a procedure.')
+            raise SchemeError(callingForm, '"%s": operand is not a procedure.' % self.name)
         continuation = Continuation.make(cont)
         return operands.car.apply(Pair.makeFromList([continuation]), callingForm, cont)
 

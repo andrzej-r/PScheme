@@ -173,3 +173,25 @@
 	    (car lst)
 	    (cons (car lst) (merge (cdr lst))))))
   (apply2 function (merge operands)))
+
+; characters
+
+(define (char-foldcase char)
+  (if (or (char=? char #\x130) (char=? char #\x131))
+      char
+      (char-downcase (char-upcase char))))
+
+(define (char-ci=? char1 char2)
+  (char=? (char-foldcase char1) (char-foldcase char2)))
+
+(define (char-ci<? char1 char2)
+  (char<? (char-foldcase char1) (char-foldcase char2)))
+
+(define (char-ci>? char1 char2)
+  (char>? (char-foldcase char1) (char-foldcase char2)))
+
+(define (char-ci<=? char1 char2)
+  (char<=? (char-foldcase char1) (char-foldcase char2)))
+
+(define (char-ci>=? char1 char2)
+  (char>=? (char-foldcase char1) (char-foldcase char2)))

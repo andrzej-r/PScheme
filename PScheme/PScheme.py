@@ -1409,34 +1409,58 @@ class PrimitiveProcedure(Procedure):
     object = None
 
     primitiveFunctions = {
-        'null?':        lambda: IsNullProcedure.make(),
-        'pair?':        lambda: IsPairProcedure.make(),
-        'procedure?':   lambda: IsProcedureProcedure.make(),
-        'eq?':          lambda: EqProcedure.make(),
-        'eqv?':         lambda: EqvProcedure.make(),
-        'equal?':       lambda: EqualProcedure.make(),
-        '=':            lambda: NumEqProcedure.make(),
-        '<':            lambda: NumLTProcedure.make(),
-        '<=':           lambda: NumLTEProcedure.make(),
-        '>':            lambda: NumGTProcedure.make(),
-        '>=':           lambda: NumGTEProcedure.make(),
-        'cons':         lambda: ConsProcedure.make(),
-        'car':          lambda: CarProcedure.make(),
-        'cdr':          lambda: CdrProcedure.make(),
-        'append2':      lambda: Append2Procedure.make(),
-        'not':          lambda: NotProcedure.make(),
-        '+':            lambda: SumProcedure.make(),
-        '-':            lambda: SubtractProcedure.make(),
-        '*':            lambda: MultiplyProcedure.make(),
-        '/':            lambda: DivideProcedure.make(),
-        'quotient':     lambda: QuotientProcedure.make(),
-        'modulo':       lambda: ModuloProcedure.make(),
-        'remainder':    lambda: RemainderProcedure.make(),
-        'write-char':   lambda: WriteCharProcedure.make(),
-        'display':      lambda: DisplayProcedure.make(),
-        'apply2':       lambda: Apply2Procedure.make(),
+        #pairs
+        'null?':            lambda: IsNullProcedure.make(),
+        'pair?':            lambda: IsPairProcedure.make(),
+        'cons':             lambda: ConsProcedure.make(),
+        'car':              lambda: CarProcedure.make(),
+        'cdr':              lambda: CdrProcedure.make(),
+        'append2':          lambda: Append2Procedure.make(),
+        #boolean
+        'eq?':              lambda: EqProcedure.make(),
+        'eqv?':             lambda: EqvProcedure.make(),
+        'equal?':           lambda: EqualProcedure.make(),
+        'not':              lambda: NotProcedure.make(),
+        #numbers
+        '=':                lambda: NumEqProcedure.make(),
+        '<':                lambda: NumLTProcedure.make(),
+        '<=':               lambda: NumLTEProcedure.make(),
+        '>':                lambda: NumGTProcedure.make(),
+        '>=':               lambda: NumGTEProcedure.make(),
+        '+':                lambda: SumProcedure.make(),
+        '-':                lambda: SubtractProcedure.make(),
+        '*':                lambda: MultiplyProcedure.make(),
+        '/':                lambda: DivideProcedure.make(),
+        'quotient':         lambda: QuotientProcedure.make(),
+        'modulo':           lambda: ModuloProcedure.make(),
+        'remainder':        lambda: RemainderProcedure.make(),
+        #characters
+        'char?':            lambda: IsCharProcedure.make(),
+        'char-alphabetic?': lambda: IsCharAlphabeticProcedure.make(),
+        'char-numeric?':    lambda: IsCharNumericProcedure.make(),
+        'char-whitespace?': lambda: IsCharWhitespaceProcedure.make(),
+        'char-upper-case?': lambda: IsCharUpperCaseProcedure.make(),
+        'char-lower-case?': lambda: IsCharLowerCaseProcedure.make(),
+        'char=?':           lambda: IsCharEqProcedure.make(),
+        'char<?':           lambda: IsCharLTProcedure.make(),
+        'char>?':           lambda: IsCharGTProcedure.make(),
+        'char<=?':          lambda: IsCharLTEProcedure.make(),
+        'char>=?':          lambda: IsCharGTEProcedure.make(),
+        'char->integer':    lambda: CharToIntegerProcedure.make(),
+        'integer->char':    lambda: IntegerToCharProcedure.make(),
+        'char-upcase':      lambda: CharUpCaseProcedure.make(),
+        'char-downcase':    lambda: CharDownCaseProcedure.make(),
+        'char-foldcase':    lambda: CharFoldCaseProcedure.make(),
+        #strings
+        'string?':          lambda: IsCharProcedure.make(),
+        #io
+        'write-char':       lambda: WriteCharProcedure.make(),
+        'display':          lambda: DisplayProcedure.make(),
+        #evaluation
+        'procedure?':       lambda: IsProcedureProcedure.make(),
+        'apply2':           lambda: Apply2Procedure.make(),
         'call-with-current-continuation': lambda: CallCCProcedure.make(),
-        'call/cc':      lambda: CallCCProcedure.make(),
+        'call/cc':          lambda: CallCCProcedure.make(),
     }
 
     @classmethod
@@ -1799,6 +1823,164 @@ class QuotientProcedure(PrimitiveProcedure):
         res = Number.make(operands.car.value // operands.cdr.car.value)
         return Trampolined.make(cont, res)
 
+## Characters
+
+class IsCharProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        return Trampolined.make(cont, Boolean.make(operands.car.isChar()))
+
+class IsCharAlphabeticProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-alphabetic?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Boolean.make(operands.car.value.isalpha()))
+
+class IsCharNumericProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-numeric?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Boolean.make(operands.car.value.isdigit()))
+
+class IsCharWhitespaceProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-whitespace?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Boolean.make(operands.car.value.isspace()))
+
+class IsCharUpperCaseProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-upper-case?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Boolean.make(operands.car.value.isupper()))
+
+class IsCharLowerCaseProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-lower-case?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Boolean.make(operands.car.value.islower()))
+
+class IsCharEqProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char=?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
+        if not operands.cdr.car.isChar():
+            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
+        res = Boolean.make(ord(operands.car.value) == ord(operands.cdr.car.value))
+        return Trampolined.make(cont, res)
+
+class IsCharLTProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char<?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
+        if not operands.cdr.car.isChar():
+            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
+        res = Boolean.make(ord(operands.car.value) < ord(operands.cdr.car.value))
+        return Trampolined.make(cont, res)
+
+class IsCharGTProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char>?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
+        if not operands.cdr.car.isChar():
+            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
+        res = Boolean.make(ord(operands.car.value) > ord(operands.cdr.car.value))
+        return Trampolined.make(cont, res)
+
+class IsCharLTEProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char<=?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
+        if not operands.cdr.car.isChar():
+            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
+        res = Boolean.make(ord(operands.car.value) <= ord(operands.cdr.car.value))
+        return Trampolined.make(cont, res)
+
+class IsCharGTEProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char>=?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
+        if not operands.cdr.car.isChar():
+            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
+        res = Boolean.make(ord(operands.car.value) >= ord(operands.cdr.car.value))
+        return Trampolined.make(cont, res)
+
+class CharToIntegerProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char->integer` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Number.make(ord(operands.car.value)))
+
+class IntegerToCharProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`integer->char` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isInteger():
+            raise SchemeError(callingForm, '"%s": operand is not an integer number.' % self.name)
+        try:
+            if sys.version_info[0] == 2:
+                char = unichr(operands.car.value)
+            else:
+                char = chr(operands.car.value)
+        except (ValueError, OverflowError):
+            raise SchemeError(callingForm, '"%s": invalid character code.' % self.name)
+        return Trampolined.make(cont, Char.make(char))
+
+class CharUpCaseProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-upcase` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Char.make(operands.car.value.upper()))
+
+class CharDownCaseProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`char-downcase` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isChar():
+            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+        return Trampolined.make(cont, Char.make(operands.car.value.lower()))
+
+## IO
 class WriteCharProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`write-char` primitive function."
     def apply(self, operands, callingForm, cont):

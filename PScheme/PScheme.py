@@ -844,26 +844,26 @@ class Pair(SExpression):
         if not cdr.isNull():
             yield cdr
 
-    def __str__(self):
+    def __repr__(self):
         if self.car.isSymbol() and self.cdr.isPair() and self.cdr.cdr.isNull():
             s = self.car.name
             if s == 'quote':
-                return '\'' + str(self.cdr.car)
+                return '\'' + repr(self.cdr.car)
             if s == 'quasiquote':
-                return '`' + str(self.cdr.car)
+                return '`' + repr(self.cdr.car)
             if s == 'unquote':
-                return ',' + str(self.cdr.car)
+                return ',' + repr(self.cdr.car)
             if s == 'unquote-splicing':
-                return ',@' + str(self.cdr.car)
-        string = '(' + str(self.car)
+                return ',@' + repr(self.cdr.car)
+        string = '(' + repr(self.car)
         cdr = self.cdr
         while cdr.isPair():
-            string += (' ' + str(cdr.car))
+            string += (' ' + repr(cdr.car))
             cdr = cdr.cdr
         if cdr.isNull():
             return (string + ')')
         else:
-            return (string + ' . ' + str(cdr) + ')')
+            return (string + ' . ' + repr(cdr) + ')')
         
     def __eq__(self, other):
         if other is self:

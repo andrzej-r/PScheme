@@ -265,7 +265,7 @@ class Nil(SelfEval):
 class Char(SelfEval):
     __slots__ = []
     pchar = re.compile(r'^#\\(.)$', flags)
-    pcharcode = re.compile(r'^#\\[xX]([0-9a-fA-F]+)$', flags)
+    pcharcode = re.compile(r'^#\\[xX]([0-9a-fA-F]{1,6})$', flags)
 
     name2char = {
         '#\\ ': ' ',
@@ -348,7 +348,7 @@ class Char(SelfEval):
 class String(SelfEval):
     __slots__ = []
     pstring = re.compile(r'^\"((?:[^"]|\")*)\"$', flags)
-    pcharcode = re.compile(r'\\[xX]([0-9a-fA-F]+);', flags)
+    pcharcode = re.compile(r'\\[xX]([0-9a-fA-F]{1,6});', flags)
     
     name2char = {
         r'\a':     '\a',
@@ -379,7 +379,6 @@ class String(SelfEval):
             if charName in cls.name2char:
                 string += cls.name2char[charName]
             elif charCode != None:
-                print('char', charName, charCode.group(1))
                 code = int(charCode.group(1), 16)
                 try:
                     if sys.version_info[0] == 2:
@@ -387,9 +386,12 @@ class String(SelfEval):
                     else:
                         string += chr(code)
                 except ValueError:
-                    raise SchemeError(token, 'Invalid character code.')
-            else:
+                    raise SchemeError(token, 'Invalid character code in: %s.' % charName)
+            elif len(charName) == 1:
                 string += charName
+            else:
+                raise SchemeError(token, 'Unknown character name: %s.' % charName)
+
         return cls.make(string)
 
     def isString(self):

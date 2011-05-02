@@ -1566,8 +1566,6 @@ class IsNullProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.' % (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isNull()))
 
 class IsPairProcedure(PrimitiveProcedure):
@@ -1575,8 +1573,6 @@ class IsPairProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isPair()))
 
 class IsProcedureProcedure(PrimitiveProcedure):
@@ -1584,8 +1580,6 @@ class IsProcedureProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isProcedure()))
 
 class ConsProcedure(PrimitiveProcedure):
@@ -1593,8 +1587,6 @@ class ConsProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         expr1 = operands.car
         expr2 = operands.cdr.car
         res = Pair.make(expr1, expr2)
@@ -1605,11 +1597,7 @@ class CarProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Pair]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         arg = operands.car
-        if not arg.isPair():
-            raise SchemeError(callingForm, '"%s" operand must be a pair.' % self.name)
         res = arg.car
         return Trampolined.make(cont, res)
 
@@ -1618,11 +1606,7 @@ class CdrProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Pair]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         arg = operands.car
-        if not arg.isPair():
-            raise SchemeError(callingForm, '"%s" operand must be a pair.' % self.name)
         res = arg.cdr
         return Trampolined.make(cont, res)
             
@@ -1631,12 +1615,8 @@ class Append2Procedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [List, List]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         expr1 = operands.car
         expr2 = operands.cdr.car
-        if (not expr1.isNull() and not expr1.isPair()) or (not expr2.isNull() and not expr2.isPair()):
-            raise SchemeError(callingForm, '"%s": operands must be lists.' % self.name)
         res = expr1.append(expr2)
         return Trampolined.make(cont, res)
 
@@ -1645,8 +1625,6 @@ class NotProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Boolean]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         arg = operands.car
         value = False
         if arg.isBoolean():
@@ -1659,8 +1637,6 @@ class EqProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1680,8 +1656,6 @@ class EqvProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1706,8 +1680,6 @@ class EqualProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
         cdr = operands.cdr
@@ -1723,17 +1695,11 @@ class NumEqProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         first = operands.car
-        if not first.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if n.value != first.value:
                 value = False
             cdr = cdr.cdr
@@ -1745,17 +1711,11 @@ class NumLTProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
-        if not previous.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value >= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1768,17 +1728,11 @@ class NumLTEProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
-        if not previous.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value > n.value:
                 value = False
             cdr = cdr.cdr
@@ -1791,17 +1745,11 @@ class NumGTProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
-        if not previous.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value <= n.value:
                 value = False
             cdr = cdr.cdr
@@ -1814,17 +1762,11 @@ class NumGTEProcedure(PrimitiveProcedure):
     operandsNo = [2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
         value = True
         previous = operands.car
-        if not previous.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         cdr = operands.cdr
         while cdr.isPair():
             n = cdr.car
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             if previous.value < n.value:
                 value = False
             cdr = cdr.cdr
@@ -1839,8 +1781,6 @@ class SumProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         value = 0
         for n in operands:
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             value += n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1850,17 +1790,11 @@ class SubtractProcedure(PrimitiveProcedure):
     operandsNo = [1]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.isNull():
             res = Number.make(-operands.car.value)
         else:
             value = operands.car.value
             for n in operands.cdr:
-                if not n.isNumber():
-                    raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
                 value -= n.value
             res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1872,8 +1806,6 @@ class MultiplyProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         value = 1
         for n in operands:
-            if not n.isNumber():
-                raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
             value *= n.value
         res = Number.make(value)
         return Trampolined.make(cont, res)
@@ -1883,17 +1815,11 @@ class DivideProcedure(PrimitiveProcedure):
     operandsNo = [1]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull():
-            raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.isNull():
             res = Number.make(1.0/operands[0].value)
         else:
             value = float(operands.car.value)
             for n in operands.cdr:
-                if not n.isNumber():
-                    raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
                 if n.value == 0:
                     raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
                 value /= n.value
@@ -1905,12 +1831,6 @@ class ModuloProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
-        if not operands.cdr.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.car.value == 0:
             raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
         res = Number.make(operands.car.value % operands.cdr.car.value)
@@ -1921,12 +1841,6 @@ class RemainderProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
-        if not operands.cdr.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.car.value == 0:
             raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
         dividend = operands.car.value
@@ -1939,12 +1853,6 @@ class QuotientProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
-        if not operands.cdr.car.isNumber():
-            raise SchemeError(callingForm, '"%s": operand is not a number.' % self.name)
         if operands.cdr.car.value == 0:
             raise SchemeError(callingForm, '"%s": division by 0.' % self.name)
         res = Number.make(operands.car.value // operands.cdr.car.value)
@@ -1957,8 +1865,6 @@ class IsCharProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isChar()))
 
 class IsCharAlphabeticProcedure(PrimitiveProcedure):
@@ -1966,10 +1872,6 @@ class IsCharAlphabeticProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Boolean.make(operands.car.value.isalpha()))
 
 class IsCharNumericProcedure(PrimitiveProcedure):
@@ -1977,10 +1879,6 @@ class IsCharNumericProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Boolean.make(operands.car.value.isdigit()))
 
 class IsCharWhitespaceProcedure(PrimitiveProcedure):
@@ -1988,10 +1886,6 @@ class IsCharWhitespaceProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Boolean.make(operands.car.value.isspace()))
 
 class IsCharUpperCaseProcedure(PrimitiveProcedure):
@@ -1999,10 +1893,6 @@ class IsCharUpperCaseProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Boolean.make(operands.car.value.isupper()))
 
 class IsCharLowerCaseProcedure(PrimitiveProcedure):
@@ -2010,10 +1900,6 @@ class IsCharLowerCaseProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Boolean.make(operands.car.value.islower()))
 
 class IsCharEqProcedure(PrimitiveProcedure):
@@ -2021,12 +1907,6 @@ class IsCharEqProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
-        if not operands.cdr.car.isChar():
-            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
         res = Boolean.make(ord(operands.car.value) == ord(operands.cdr.car.value))
         return Trampolined.make(cont, res)
 
@@ -2035,12 +1915,6 @@ class IsCharLTProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
-        if not operands.cdr.car.isChar():
-            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
         res = Boolean.make(ord(operands.car.value) < ord(operands.cdr.car.value))
         return Trampolined.make(cont, res)
 
@@ -2049,12 +1923,6 @@ class IsCharGTProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
-        if not operands.cdr.car.isChar():
-            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
         res = Boolean.make(ord(operands.car.value) > ord(operands.cdr.car.value))
         return Trampolined.make(cont, res)
 
@@ -2063,12 +1931,6 @@ class IsCharLTEProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
-        if not operands.cdr.car.isChar():
-            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
         res = Boolean.make(ord(operands.car.value) <= ord(operands.cdr.car.value))
         return Trampolined.make(cont, res)
 
@@ -2077,12 +1939,6 @@ class IsCharGTEProcedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": first operand is not a character.' % self.name)
-        if not operands.cdr.car.isChar():
-            raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
         res = Boolean.make(ord(operands.car.value) >= ord(operands.cdr.car.value))
         return Trampolined.make(cont, res)
 
@@ -2091,10 +1947,6 @@ class CharToIntegerProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Number.make(ord(operands.car.value)))
 
 class IntegerToCharProcedure(PrimitiveProcedure):
@@ -2102,10 +1954,6 @@ class IntegerToCharProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [IntegerNumber]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isInteger():
-            raise SchemeError(callingForm, '"%s": operand is not an integer number.' % self.name)
         try:
             if sys.version_info[0] == 2:
                 char = unichr(operands.car.value)
@@ -2120,10 +1968,6 @@ class CharUpCaseProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Char.make(operands.car.value.upper()))
 
 class CharDownCaseProcedure(PrimitiveProcedure):
@@ -2131,10 +1975,6 @@ class CharDownCaseProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Char.make(operands.car.value.lower()))
 
 ## String        
@@ -2144,8 +1984,6 @@ class IsStringProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
         return Trampolined.make(cont, Boolean.make(operands.car.isString()))
 
 class StringMakeProcedure(PrimitiveProcedure):
@@ -2153,14 +1991,8 @@ class StringMakeProcedure(PrimitiveProcedure):
     operandsNo = [1,2]
     operandTypes = [IntegerNumber, Char]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isInteger():
-            raise SchemeError(callingForm, '"%s": first operand is not an integer number.' % self.name)
         char = chr(0)
         if operands.cdr.isPair():
-            if not operands.cdr.car.isChar():
-                raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
             char = operands.cdr.car.value
         string = char * operands.car.value
         return Trampolined.make(cont, String.make(string))
@@ -2172,8 +2004,6 @@ class StringProcedure(PrimitiveProcedure):
     def apply(self, operands, callingForm, cont):
         string = ""
         for c in operands:
-            if not c.isChar():
-                raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
             string += c.value
         return Trampolined.make(cont, String.make(string))
 
@@ -2182,10 +2012,6 @@ class StringLengthProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [String]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isString():
-            raise SchemeError(callingForm, '"%s": operand is not a string.' % self.name)
         return Trampolined.make(cont, Number.make(len(operands.car.value)))
 
 ## IO
@@ -2194,10 +2020,6 @@ class WriteCharProcedure(PrimitiveProcedure):
     operandsNo = [1,2]
     operandTypes = [Char, SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isChar():
-            raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         if sys.version_info[0] == 2:
             sys.stdout.write(unicode(operands.car).encode('utf-8'))
         else:
@@ -2209,8 +2031,6 @@ class DisplayProcedure(PrimitiveProcedure):
     operandsNo = [1,2]
     operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
-            raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
         if sys.version_info[0] == 2:
             sys.stdout.write(unicode(operands.car).encode('utf-8'))
         else:
@@ -2222,14 +2042,9 @@ class Apply2Procedure(PrimitiveProcedure):
     operandsNo = [2,2]
     operandTypes = [Procedure, List]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
         procedure = operands.car
-        if not procedure.isProcedure():
-            raise SchemeError(callingForm, '"%s": first operand is not a procedure.' % self.name)
         operands = operands.cdr.car
-        #if not operands.isNull() and not operands.isPair():
-        if not operands.isList():
+        if not operands.isList(): #is it a proper list?
             raise SchemeError(callingForm, '"%s": second operand is not a list.' % self.name)
         return procedure.apply(operands, callingForm, cont)
 
@@ -2238,10 +2053,6 @@ class CallCCProcedure(PrimitiveProcedure):
     operandsNo = [1,1]
     operandTypes = [Procedure]
     def apply(self, operands, callingForm, cont):
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
-        if not operands.car.isProcedure():
-            raise SchemeError(callingForm, '"%s": operand is not a procedure.' % self.name)
         continuation = Continuation.make(cont)
         return operands.car.apply(Pair.makeFromList([continuation]), callingForm, cont)
 

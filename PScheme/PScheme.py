@@ -108,6 +108,8 @@ class Token(object):
         
 class SExpression(object):
     __slots__ = []
+    typeName = 'an s-expression'
+    
     pnumber = re.compile(r'^' + number + r'$', flags)
     pstring = re.compile(r'^' + string + r'$', flags)
     pbrokenstring = re.compile(r'^' + brokenstring, flags)
@@ -234,6 +236,8 @@ class SExpression(object):
     
 class SelfEval(SExpression):
     __slots__ = ['value']
+    typeName = 'a self-evaluating expression'
+    
     def eval(self, frame, cont):
         return Trampolined.make(cont, self)
         #return self
@@ -245,6 +249,8 @@ class SelfEval(SExpression):
         return str(self.value)
         
 class Nil(SelfEval):
+    typeName = 'an undefined value'
+    
     cache = None
     
     @classmethod
@@ -264,6 +270,8 @@ class Nil(SelfEval):
 
 class Char(SelfEval):
     __slots__ = []
+    typeName = 'a char'
+    
     pchar = re.compile(r'^#\\(.)$', flags)
     pcharcode = re.compile(r'^#\\[xX]([0-9a-fA-F]{1,6})$', flags)
 
@@ -347,6 +355,8 @@ class Char(SelfEval):
         
 class String(SelfEval):
     __slots__ = ['mutable']
+    typeName = 'a string'
+
     pstring = re.compile(r'^\"((?:[^"]|\")*)\"$', flags)
     pcharcode = re.compile(r'\\[xX]([0-9a-fA-F]{1,6});', flags)
     
@@ -426,6 +436,8 @@ class String(SelfEval):
         
 class Number(SelfEval):
     __slots__ = []
+    typeName = 'a number'
+    
     @classmethod
     def make(cls, value):
         if isinstance(value, int):
@@ -450,6 +462,7 @@ class Number(SelfEval):
 class IntegerNumber(Number):
     __slots__ = []
     cache = [None]*256
+    typeName = 'an integer number'
     
     @classmethod
     def make(cls, value):
@@ -492,6 +505,8 @@ class IntegerNumber(Number):
 
 class RealNumber(Number):
     __slots__ = []
+    typeName = 'a real number'
+    
     @classmethod
     def make(cls, value):
         self = cls()
@@ -510,6 +525,7 @@ class RealNumber(Number):
 class Boolean(SelfEval):
     __slots__ = []
     cache = {}
+    typeName = 'a boolean value'
     
     @classmethod
     def make(cls, value):
@@ -558,6 +574,7 @@ class ErrorExpression(SelfEval):
     """
 
     __slots__ = []
+    typeName = 'an error'
     
     @classmethod
     def make(cls, exception):
@@ -567,6 +584,7 @@ class ErrorExpression(SelfEval):
 
 class Symbol(SExpression):
     __slots__ = ['name']
+    typeName = 'a symbol'
 
     cache = {}
     
@@ -607,6 +625,7 @@ class Symbol(SExpression):
 class Null(SExpression):
     __slots__ = []
     cache = None
+    typeName = 'a null list'
         
     @classmethod
     def make(cls):
@@ -660,6 +679,8 @@ class Null(SExpression):
 
 class Pair(SExpression):
     __slots__ = ['car', 'cdr', 'quasiquoteLevel', 'unquoteSplice', 'meta', 'topLevel']
+    typeName = 'a pair'
+    
     @classmethod
     def make(cls, car, cdr):
         self = cls()
@@ -886,6 +907,9 @@ class Pair(SExpression):
 
 class Procedure(SExpression):
     __slots__ = []
+    typeName = 'a procedure'
+    
+    def apply(self, operands, callingForm, cont):
     def apply(self, operands, callingForm, cont = None):
         pass
         
@@ -897,6 +921,9 @@ class Procedure(SExpression):
     
 class Continuation(Procedure):
     __slots__ = ['continuation']
+    name = 'continuation'
+    typeName = 'a continuation'
+    operandsNo = [1,1]
     @classmethod
     def make(cls, continuation):
         self = cls()
@@ -916,6 +943,9 @@ class Continuation(Procedure):
 
 class CompoundProcedure(Procedure):
     __slots__ = ['formals', 'body', 'frame', 'meta']
+    name = 'procedure'
+    typeName = 'a compound procedure'
+    operandTypes = [SExpression]
     @classmethod
     def make(cls, formals, body, frame, meta):
         self = cls()
@@ -977,6 +1007,7 @@ class CompoundProcedure(Procedure):
 
 class Trampolined(SExpression):
     __slots__ = ['continuation', 'operand']
+    typeName = 'a trampolined value'
 
     @classmethod
     def make(cls, continuation, operand):
@@ -997,6 +1028,8 @@ class Trampolined(SExpression):
         return '#<trampolined (%s) 0x%x>' % (str(self.operand), id(self))
 
 class SpecialSyntax(SExpression):
+    typeName = 'a syntax expression'
+    
     object = None
     
     specialForms = {
@@ -1410,6 +1443,8 @@ class OrForm(SpecialSyntax):
         return operands.car.eval(frame, step2)
     
 class PrimitiveProcedure(Procedure):
+    typeName = 'a primitive procedure'
+    
     object = None
 
     primitiveFunctions = {
@@ -2082,6 +2117,8 @@ class CallCCProcedure(PrimitiveProcedure):
 
 class Frame(SExpression):
     __slots__ = ['parentFrame', 'symbols']
+    typeName = 'an environment frame'
+    
     def __init__(self, parentFrame=None):
         self.parentFrame = parentFrame
         self.symbols = {}

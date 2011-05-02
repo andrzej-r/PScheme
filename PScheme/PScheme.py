@@ -1456,7 +1456,10 @@ class PrimitiveProcedure(Procedure):
         'char-downcase':    lambda: CharDownCaseProcedure.make(),
         'char-foldcase':    lambda: CharFoldCaseProcedure.make(),
         #strings
-        'string?':          lambda: IsCharProcedure.make(),
+        'string?':          lambda: IsStringProcedure.make(),
+        'string':           lambda: StringProcedure.make(),
+        'make-string':      lambda: StringMakeProcedure.make(),
+        'string-length':    lambda: StringLengthProcedure.make(),
         #io
         'write-char':       lambda: WriteCharProcedure.make(),
         'display':          lambda: DisplayProcedure.make(),
@@ -1983,6 +1986,49 @@ class CharDownCaseProcedure(PrimitiveProcedure):
         if not operands.car.isChar():
             raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
         return Trampolined.make(cont, Char.make(operands.car.value.lower()))
+
+## String        
+
+class IsStringProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`string?` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        return Trampolined.make(cont, Boolean.make(operands.car.isString()))
+
+class StringMakeProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`string-make` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
+            raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isInteger():
+            raise SchemeError(callingForm, '"%s": first operand is not an integer number.' % self.name)
+        char = chr(0)
+        if operands.cdr.isPair():
+            if not operands.cdr.car.isChar():
+                raise SchemeError(callingForm, '"%s": second operand is not a character.' % self.name)
+            char = operands.cdr.car.value
+        string = char * operands.car.value
+        return Trampolined.make(cont, String.make(string))
+
+class StringProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`string` primitive function."
+    def apply(self, operands, callingForm, cont):
+        string = ""
+        for c in operands:
+            if not c.isChar():
+                raise SchemeError(callingForm, '"%s": operand is not a character.' % self.name)
+            string += c.value
+        return Trampolined.make(cont, String.make(string))
+
+class StringLengthProcedure(PrimitiveProcedure):
+    "Implements a :c:macro:`string-length` primitive function."
+    def apply(self, operands, callingForm, cont):
+        if operands.isNull() or operands.cdr.isPair():
+            raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
+        if not operands.car.isString():
+            raise SchemeError(callingForm, '"%s": operand is not a string.' % self.name)
+        return Trampolined.make(cont, Number.make(len(operands.car.value)))
 
 ## IO
 class WriteCharProcedure(PrimitiveProcedure):

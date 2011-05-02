@@ -866,6 +866,9 @@ class Pair(SExpression):
         else:
             return (string + ' . ' + repr(cdr) + ')')
         
+    def __str__(self):
+        return repr(self)
+        
     def __eq__(self, other):
         if other is self:
             return True

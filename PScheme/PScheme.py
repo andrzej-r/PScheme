@@ -622,7 +622,11 @@ class Symbol(SExpression):
     def __eq__(self, other):
         return (other is self) # not needed because of chaching # or (type(other) == type(self) and other.name == self.name)
 
-class Null(SExpression):
+class List(SExpression):
+    __slots__ = []
+    typeName = 'a list'
+    
+class Null(List):
     __slots__ = []
     cache = None
     typeName = 'a null list'
@@ -677,7 +681,7 @@ class Null(SExpression):
     def __eq__(self, other):
         return (other is self) #or (type(other) == type(self))
 
-class Pair(SExpression):
+class Pair(List):
     __slots__ = ['car', 'cdr', 'quasiquoteLevel', 'unquoteSplice', 'meta', 'topLevel']
     typeName = 'a pair'
     

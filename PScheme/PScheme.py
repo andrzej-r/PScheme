@@ -784,7 +784,7 @@ class Pair(List):
     def eval(self, frame, cont):
         def step2(operator):
             def step3(operands):
-                return operator.apply(operands, self, cont)
+                return operator.checkAndApply(operands, self, cont)
             if not operator.isProcedure():
                 raise SchemeError(self, 'procedure application, first operand is not a procedure.')
             return self.cdr.evalElements(frame, step3, SchemeError(self, '"eval": improper operand list'))
@@ -921,7 +921,34 @@ class Procedure(SExpression):
 
     def eval(self, frame, cont):
         raise SchemeError(self, 'Procedure should not be evaluated directly')
-    
+
+    def checkAndApply(self, operands, callingForm, cont):
+        lenOperands = len(operands)
+        minOperands = self.operandsNo[0]
+        if len(self.operandsNo) > 1:
+            maxOperands = self.operandsNo[1]
+            if not minOperands <= lenOperands <= maxOperands:
+                if minOperands == maxOperands == 1: #for English grammar
+                    raise SchemeError(callingForm, '"%s" requires %d operand, provided %d.'% (self.name, minOperands, lenOperands))
+                if minOperands == maxOperands:
+                    raise SchemeError(callingForm, '"%s" requires %d operands, provided %d.'% (self.name, minOperands, lenOperands))
+                if minOperands == 1: #for English grammar
+                    raise SchemeError(callingForm, '"%s" requires %d operand, provided %d.'% (self.name, minOperands, lenOperands))
+                raise SchemeError(callingForm, '"%s" requires at least %d operands and at most %d operands, provided %d.'% (self.name, minOperands, maxOperands, lenOperands))
+        elif not minOperands <= lenOperands:
+            if minOperands == 1: #for English grammar
+                raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, lenOperands))
+            raise SchemeError(callingForm, '"%s" requires at least %d operands, provided %d.'% (self.name, minOperands, lenOperands))
+
+        last = len(self.operandTypes) - 1
+        for n in range(0,len(operands)):
+            if not isinstance(operands[n], self.operandTypes[min(n, last)]):
+                raise SchemeError(callingForm, '"%s": operand #%d must be %s, provided %s.'% (self.name, n+1, self.operandTypes[min(n, last)].typeName, operands[n].typeName))
+        
+        return self.apply(operands, callingForm, cont)
+        
+    operandTypes = [SExpression, SExpression, SExpression, SExpression, SExpression, SExpression, SExpression, SExpression, SExpression, SExpression]
+
 class Continuation(Procedure):
     __slots__ = ['continuation']
     name = 'continuation'

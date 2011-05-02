@@ -914,7 +914,6 @@ class Procedure(SExpression):
     typeName = 'a procedure'
     
     def apply(self, operands, callingForm, cont):
-    def apply(self, operands, callingForm, cont = None):
         pass
         
     def isProcedure(self):
@@ -937,7 +936,7 @@ class Continuation(Procedure):
     def isContinuation(self):
         return True
         
-    def apply(self, operands, callingForm, cont = None):
+    def apply(self, operands, callingForm, cont):
         if len(operands) != 1:
             raise SchemeError(callingForm, 'Wrong number of operands to continuation, required 1, provided ' + str(len(operands)) + '.')
         return Trampolined.make(self.continuation, operands.car)
@@ -1001,7 +1000,7 @@ class CompoundProcedure(Procedure):
             return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
         raise SchemeError(callingForm, 'Wrong format of operands.')
         
-    def apply(self, operands, callingForm, cont = None):
+    def apply(self, operands, callingForm, cont):
         def step2(newFrame):
             return self.body.evalSequence(newFrame, cont)
         return self.bind(self.formals, operands, callingForm, Frame(self.frame), step2)
@@ -1075,7 +1074,7 @@ class SpecialSyntax(SExpression):
     def eval(self, frame, cont):
         raise SchemeError(self, 'Special syntax should not be evaluated directly')
     
-    def apply(self, operands, callingForm, frame, cont = None):
+    def apply(self, operands, callingForm, frame, cont):
         pass
 
     def isSpecialSyntax(self):
@@ -1086,7 +1085,7 @@ class SpecialSyntax(SExpression):
     
 class QuoteForm(SpecialSyntax):
     "Implements a :c:macro:`quote` or :c:macro:`'` form."
-    def apply(self, operands, callingForm, frame, cont = None):
+    def apply(self, operands, callingForm, frame, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, given %d.' % (self.name, len(operands)))
         res = operands.car
@@ -1123,7 +1122,7 @@ class QuotedForm(SpecialSyntax):
 
 class QuasiQuoteForm(QuotedForm):
     "Implements a :c:macro:`quasiquote` or :c:macro:`\`` form."
-    def apply(self, operands, callingForm, frame, cont = None):
+    def apply(self, operands, callingForm, frame, cont):
         def step2(expr):
             if expr.isPair() and expr.unquoteSplice:
                 raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
@@ -1161,7 +1160,7 @@ class UnQuoteForm(QuotedForm):
 
 class UnQuoteSplicingForm(QuotedForm):
     "Implements an :c:macro:`unquote-splicing` or :c:macro:`,@` form."
-    def apply(self, operands, callingForm, frame, cont = None):
+    def apply(self, operands, callingForm, frame, cont):
         def evaluated(res):
             if not res.isPair() and not res.isNull():
                 raise SchemeError(callingForm, 'result of "unquote-splicing" is not a list.')

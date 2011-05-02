@@ -927,6 +927,8 @@ class Continuation(Procedure):
     name = 'continuation'
     typeName = 'a continuation'
     operandsNo = [1,1]
+    operandTypes = [SExpression]
+    
     @classmethod
     def make(cls, continuation):
         self = cls()
@@ -943,12 +945,13 @@ class Continuation(Procedure):
     
     def __str__(self):
         return '#<continuation 0x%x>' % id(self)
-
+        
 class CompoundProcedure(Procedure):
-    __slots__ = ['formals', 'body', 'frame', 'meta']
+    __slots__ = ['formals', 'body', 'frame', 'meta', 'operandsNo']
     name = 'procedure'
     typeName = 'a compound procedure'
     operandTypes = [SExpression]
+    
     @classmethod
     def make(cls, formals, body, frame, meta):
         self = cls()
@@ -963,6 +966,7 @@ class CompoundProcedure(Procedure):
     def checkFormals(self):
         defined = set()
         pointer = self.formals
+        operandsNo = 0
         while pointer.isPair():
             if not pointer.car.isSymbol():
                 raise SchemeError(self, 'Invalid procedure operand name')
@@ -970,8 +974,13 @@ class CompoundProcedure(Procedure):
                 raise SchemeError(self, 'Duplicated operand name')
             defined.add(pointer.car.name)
             pointer = pointer.cdr
+            operandsNo += 1
         if not pointer.isSymbol() and not pointer.isNull():
             raise SchemeError(self, 'Invalid procedure operand name')
+        if pointer.isSymbol():
+            self.operandsNo = [operandsNo]
+        else:
+            self.operandsNo = [operandsNo,operandsNo]
         
     def bind(self, formals, operands, callingForm, frame, cont):
         if formals.isNull() and operands.isNull():
@@ -1527,6 +1536,8 @@ class PrimitiveProcedure(Procedure):
     
 class IsNullProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`null?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.' % (self.name, len(operands)))
@@ -1534,6 +1545,8 @@ class IsNullProcedure(PrimitiveProcedure):
 
 class IsPairProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`pair?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1541,6 +1554,8 @@ class IsPairProcedure(PrimitiveProcedure):
 
 class IsProcedureProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`procedure?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1548,6 +1563,8 @@ class IsProcedureProcedure(PrimitiveProcedure):
 
 class ConsProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cons` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1558,6 +1575,8 @@ class ConsProcedure(PrimitiveProcedure):
 
 class CarProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`car` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Pair]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1569,6 +1588,8 @@ class CarProcedure(PrimitiveProcedure):
 
 class CdrProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`cdr` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Pair]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1580,6 +1601,8 @@ class CdrProcedure(PrimitiveProcedure):
             
 class Append2Procedure(PrimitiveProcedure):
     "Implements a two-argument :c:macro:`append` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [List, List]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1592,6 +1615,8 @@ class Append2Procedure(PrimitiveProcedure):
 
 class NotProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`not` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Boolean]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1604,6 +1629,8 @@ class NotProcedure(PrimitiveProcedure):
 
 class EqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`eq?` primitive function."
+    operandsNo = [2]
+    operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1623,6 +1650,8 @@ class EqProcedure(PrimitiveProcedure):
         
 class EqvProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`eqv?` primitive function."
+    operandsNo = [2]
+    operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1647,6 +1676,8 @@ class EqvProcedure(PrimitiveProcedure):
         
 class EqualProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`equal?` primitive function."
+    operandsNo = [2]
+    operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1662,6 +1693,8 @@ class EqualProcedure(PrimitiveProcedure):
         
 class NumEqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`=` primitive function."
+    operandsNo = [2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1682,6 +1715,8 @@ class NumEqProcedure(PrimitiveProcedure):
         
 class NumLTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`<` primitive function."
+    operandsNo = [2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1703,6 +1738,8 @@ class NumLTProcedure(PrimitiveProcedure):
         
 class NumLTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`<=` primitive function."
+    operandsNo = [2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1724,6 +1761,8 @@ class NumLTEProcedure(PrimitiveProcedure):
         
 class NumGTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`>` primitive function."
+    operandsNo = [2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1745,6 +1784,8 @@ class NumGTProcedure(PrimitiveProcedure):
         
 class NumGTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`>=` primitive function."
+    operandsNo = [2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1766,6 +1807,8 @@ class NumGTEProcedure(PrimitiveProcedure):
         
 class SumProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`+` primitive function."
+    operandsNo = [0]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         value = 0
         for n in operands:
@@ -1777,6 +1820,8 @@ class SumProcedure(PrimitiveProcedure):
         
 class SubtractProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`-` primitive function."
+    operandsNo = [1]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1795,6 +1840,8 @@ class SubtractProcedure(PrimitiveProcedure):
 
 class MultiplyProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`*` primitive function."
+    operandsNo = [0]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         value = 1
         for n in operands:
@@ -1806,6 +1853,8 @@ class MultiplyProcedure(PrimitiveProcedure):
         
 class DivideProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`/` primitive function."
+    operandsNo = [1]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1826,6 +1875,8 @@ class DivideProcedure(PrimitiveProcedure):
 
 class ModuloProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`modulo` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1840,6 +1891,8 @@ class ModuloProcedure(PrimitiveProcedure):
 
 class RemainderProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`remainder` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1856,6 +1909,8 @@ class RemainderProcedure(PrimitiveProcedure):
 
 class QuotientProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`quotient` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Number, Number]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1872,6 +1927,8 @@ class QuotientProcedure(PrimitiveProcedure):
 
 class IsCharProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1879,6 +1936,8 @@ class IsCharProcedure(PrimitiveProcedure):
 
 class IsCharAlphabeticProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-alphabetic?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1888,6 +1947,8 @@ class IsCharAlphabeticProcedure(PrimitiveProcedure):
 
 class IsCharNumericProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-numeric?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1897,6 +1958,8 @@ class IsCharNumericProcedure(PrimitiveProcedure):
 
 class IsCharWhitespaceProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-whitespace?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1906,6 +1969,8 @@ class IsCharWhitespaceProcedure(PrimitiveProcedure):
 
 class IsCharUpperCaseProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-upper-case?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1915,6 +1980,8 @@ class IsCharUpperCaseProcedure(PrimitiveProcedure):
 
 class IsCharLowerCaseProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-lower-case?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1924,6 +1991,8 @@ class IsCharLowerCaseProcedure(PrimitiveProcedure):
 
 class IsCharEqProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char=?` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1936,6 +2005,8 @@ class IsCharEqProcedure(PrimitiveProcedure):
 
 class IsCharLTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char<?` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1948,6 +2019,8 @@ class IsCharLTProcedure(PrimitiveProcedure):
 
 class IsCharGTProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char>?` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1960,6 +2033,8 @@ class IsCharGTProcedure(PrimitiveProcedure):
 
 class IsCharLTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char<=?` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1972,6 +2047,8 @@ class IsCharLTEProcedure(PrimitiveProcedure):
 
 class IsCharGTEProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char>=?` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Char, Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -1984,6 +2061,8 @@ class IsCharGTEProcedure(PrimitiveProcedure):
 
 class CharToIntegerProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char->integer` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -1993,6 +2072,8 @@ class CharToIntegerProcedure(PrimitiveProcedure):
 
 class IntegerToCharProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`integer->char` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [IntegerNumber]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -2009,6 +2090,8 @@ class IntegerToCharProcedure(PrimitiveProcedure):
 
 class CharUpCaseProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-upcase` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -2018,6 +2101,8 @@ class CharUpCaseProcedure(PrimitiveProcedure):
 
 class CharDownCaseProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`char-downcase` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -2029,6 +2114,8 @@ class CharDownCaseProcedure(PrimitiveProcedure):
 
 class IsStringProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`string?` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -2036,6 +2123,8 @@ class IsStringProcedure(PrimitiveProcedure):
 
 class StringMakeProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`string-make` primitive function."
+    operandsNo = [1,2]
+    operandTypes = [IntegerNumber, Char]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
@@ -2051,6 +2140,8 @@ class StringMakeProcedure(PrimitiveProcedure):
 
 class StringProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`string` primitive function."
+    operandsNo = [0]
+    operandTypes = [Char]
     def apply(self, operands, callingForm, cont):
         string = ""
         for c in operands:
@@ -2061,6 +2152,8 @@ class StringProcedure(PrimitiveProcedure):
 
 class StringLengthProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`string-length` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [String]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))
@@ -2071,6 +2164,8 @@ class StringLengthProcedure(PrimitiveProcedure):
 ## IO
 class WriteCharProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`write-char` primitive function."
+    operandsNo = [1,2]
+    operandTypes = [Char, SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
@@ -2084,6 +2179,8 @@ class WriteCharProcedure(PrimitiveProcedure):
 
 class DisplayProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`display` primitive function."
+    operandsNo = [1,2]
+    operandTypes = [SExpression, SExpression]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or (operands.cdr.isPair() and operands.cdr.cdr.isPair()):
             raise SchemeError(callingForm, '"%s" requires 1 or 2 operands, provided %d.'% (self.name, len(operands)))
@@ -2095,6 +2192,8 @@ class DisplayProcedure(PrimitiveProcedure):
 
 class Apply2Procedure(PrimitiveProcedure):
     "Implements a two-argument :c:macro:`apply2` primitive function."
+    operandsNo = [2,2]
+    operandTypes = [Procedure, List]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isNull() or operands.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 2 operands, provided %d.'% (self.name, len(operands)))
@@ -2109,6 +2208,8 @@ class Apply2Procedure(PrimitiveProcedure):
 
 class CallCCProcedure(PrimitiveProcedure):
     "Implements a :c:macro:`call/cc` or :c:macro:`call-with-current-continuation` primitive function."
+    operandsNo = [1,1]
+    operandTypes = [Procedure]
     def apply(self, operands, callingForm, cont):
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, provided %d.'% (self.name, len(operands)))

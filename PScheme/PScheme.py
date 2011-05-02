@@ -346,7 +346,7 @@ class Char(SelfEval):
         
         
 class String(SelfEval):
-    __slots__ = []
+    __slots__ = ['mutable']
     pstring = re.compile(r'^\"((?:[^"]|\")*)\"$', flags)
     pcharcode = re.compile(r'\\[xX]([0-9a-fA-F]{1,6});', flags)
     
@@ -367,6 +367,7 @@ class String(SelfEval):
     def make(cls, string):
         self = cls()
         self.value = string
+        self.mutable = True
         return self
 
     @classmethod

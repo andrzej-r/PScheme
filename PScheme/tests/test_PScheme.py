@@ -8,8 +8,7 @@ def flush(generator):
             
 class PSchemeTest(unittest.TestCase):
     def setUp(self):
-        self.frame = Frame()
-        
+        self.frame = NullFrame.make()
         fname = os.path.join(os.path.dirname(__file__), '../boot.scm')
         parser = Parser(fname)
         with open(fname, 'r') as f:

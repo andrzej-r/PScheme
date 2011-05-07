@@ -86,7 +86,7 @@ def repl():
     as the module.
     """
 
-    frame = PScheme.Frame()
+    frame = PScheme.NullFrame.make()
     fname = os.path.join(os.path.dirname(__file__), 'boot.scm')
     parser = PScheme.Parser(fname)
     with open(fname, 'r') as f:

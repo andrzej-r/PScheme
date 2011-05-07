@@ -788,8 +788,11 @@ class Pair(List):
             if not operator.isProcedure():
                 raise SchemeError(self, 'procedure application, first operand is not a procedure.')
             return self.cdr.evalElements(frame, step3, SchemeError(self, '"eval": improper operand list'))
-        if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms and frame.resolveSymbolLocation(self.car) == None:
-            return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
+        if self.car.isSymbol() and isinstance(frame.resolveSymbol(self.car), SpecialSyntax):
+            return frame.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
+        #    return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
+        #if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms and frame.resolveSymbolLocation(self.car) == None:
+        #    return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
         return self.car.eval(frame, step2)
 
     def evalElements(self, frame, cont, excp=None):
@@ -1013,10 +1016,10 @@ class CompoundProcedure(Procedure):
         if formals.isNull() and operands.isNull():
             return Trampolined.make(cont, frame)
         elif formals.isSymbol():
-            frame.addSymbol(formals, operands)
+            frame.setSymbolValue(formals, operands)
             return Trampolined.make(cont, frame)
         elif formals.isPair() and operands.isPair():
-            frame.addSymbol(formals.car, operands.car)
+            frame.setSymbolValue(formals.car, operands.car)
             return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
         elif formals.isList():
             raise SchemeError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
@@ -1029,17 +1032,17 @@ class CompoundProcedure(Procedure):
         if operands.isNull() and formals.isNull():
             return Trampolined.make(cont, frame)
         if formals.isSymbol():
-            frame.addSymbol(formals, operands)
+            frame.setSymbolValue(formals, operands)
             return Trampolined.make(cont, frame)
         if operands.isPair() and formals.isPair() and formals.car.isSymbol():
-            frame.addSymbol(formals.car, operands.car)
+            frame.setSymbolValue(formals.car, operands.car)
             return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
         raise SchemeError(callingForm, 'Wrong format of operands.')
         
     def apply(self, operands, callingForm, cont):
         def step2(newFrame):
             return self.body.evalSequence(newFrame, cont)
-        return self.bind(self.formals, operands, callingForm, Frame(self.frame), step2)
+        return self.bind(self.formals, operands, callingForm, Frame.make(self.frame), step2)
     
     def __str__(self):
         return '#<procedure %s 0x%x>' % (str(self.formals), id(self))
@@ -1070,28 +1073,6 @@ class SpecialSyntax(SExpression):
     typeName = 'a syntax expression'
     
     object = None
-    
-    specialForms = {
-        'quote':            lambda: QuoteForm.make(),
-        'quasiquote':       lambda: QuasiQuoteForm.make(),
-        'unquote':          lambda: UnQuoteForm.make(),
-        'unquote-splicing': lambda: UnQuoteSplicingForm.make(),
-        'define':           lambda: DefineForm.make(),
-        'lambda':           lambda: LambdaForm.make(),
-        'let':              lambda: LetForm.make(),
-        'let*':             lambda: LetStarForm.make(),
-        'letrec':           lambda: LetrecForm.make(),
-        'letrec*':          lambda: LetrecStarForm.make(),
-        'set!':             lambda: SetForm.make(),
-        'set-car!':         lambda: SetCarForm.make(),
-        'set-cdr!':         lambda: SetCdrForm.make(),
-        'if':               lambda: IfForm.make(),
-        'cond':             lambda: CondForm.make(),
-        'case':             lambda: CaseForm.make(),
-        'and':              lambda: AndForm.make(),
-        'or':               lambda: OrForm.make(),
-        
-    }
 
     @classmethod
     def make(cls):
@@ -1099,14 +1080,6 @@ class SpecialSyntax(SExpression):
             cls.object = cls()
         return cls.object
             
-    @classmethod
-    def resolveSymbol(cls, symbol):
-        if not symbol.name in cls.specialForms:
-            raise SchemeError(callingForm, 'Undefined primitive function %s.' % symbol.name)
-        form = cls.specialForms[symbol.name]()
-        form.name = symbol.name
-        return form
-
     def eval(self, frame, cont):
         raise SchemeError(self, 'Special syntax should not be evaluated directly')
     
@@ -1232,7 +1205,7 @@ class DefineForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s": Invalid type of the first operand' % self.name)
         if firstArg.isSymbol():
             def step2(value):
-                frame.addSymbol(firstArg, value)
+                frame.setSymbolValue(firstArg, value)
                 return Trampolined.make(cont, Nil.make())
             return operands.cdr.car.eval(frame, step2)
         if firstArg.isPair():
@@ -1242,7 +1215,7 @@ class DefineForm(SpecialSyntax):
             formals = firstArg.cdr #.toList()
             body = operands.cdr
             procedure = CompoundProcedure.make(formals, body, frame, callingForm.meta)
-            frame.addSymbol(procName, procedure)
+            frame.setSymbolValue(procName, procedure)
             return Trampolined.make(cont, Nil.make())
 
 class LambdaForm(SpecialSyntax):
@@ -1264,7 +1237,7 @@ class LetForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
             return operands.cdr.evalSequence(newFrame, cont)
-        return self.processBindings(operands.car, callingForm, frame, Frame(frame), step2)
+        return self.processBindings(operands.car, callingForm, frame, Frame.make(frame), step2)
         
     def processBindings(self, bindings, callingForm, oldFrame, newFrame, cont):
         def step2(bindingValue):
@@ -1272,7 +1245,8 @@ class LetForm(SpecialSyntax):
                 raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
             if binding.car.name in newFrame.symbols:
                 raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
-            newFrame.symbols[binding.car.name] = bindingValue
+            newFrame.setSymbolValue(binding.car, bindingValue)
+            #newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
@@ -1300,8 +1274,9 @@ class LetStarForm(SpecialSyntax):
                 raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
             #if binding.car.name in newFrame.symbols:
             #    raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
-            newFrame = Frame(frame)
-            newFrame.symbols[binding.car.name] = bindingValue
+            newFrame = Frame.make(frame)
+            newFrame.setSymbolValue(binding.car, bindingValue)
+            #newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, frame)
@@ -1325,7 +1300,7 @@ class LetrecForm(SpecialSyntax):
                     return operands.cdr.evalSequence(newFrame2, cont)
                 return self.bindValues(operands.car, inits, callingForm, newFrame, step4)
             return self.evalInits(operands.car, callingForm, newFrame, step3)
-        return self.processBindingVariables(operands.car, callingForm, frame, Frame(frame), step2)
+        return self.processBindingVariables(operands.car, callingForm, frame, Frame.make(frame), step2)
         
     def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
         if bindings.isNull():
@@ -1341,7 +1316,8 @@ class LetrecForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
         if binding.car.name in newFrame.symbols:
             raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
-        newFrame.symbols[binding.car.name] = Nil.make()
+        newFrame.setSymbolValue(binding.car, Nil.make())
+        #newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         #return binding.cdr.car.eval(oldFrame, step2)
 
@@ -1359,7 +1335,8 @@ class LetrecForm(SpecialSyntax):
             return Trampolined.make(cont, frame)
         binding = bindings.car.car
         init = inits.car
-        frame.symbols[binding.name] = init
+        frame.setSymbolValue(binding, init)
+        #frame.symbols[binding.name] = init
         return self.bindValues(bindings.cdr, inits.cdr, callingForm, frame, cont)
 
 class LetrecStarForm(SpecialSyntax):
@@ -1371,7 +1348,7 @@ class LetrecStarForm(SpecialSyntax):
             def step3(newFrame2):
                 return operands.cdr.evalSequence(newFrame2, cont)
             return self.evalInits(operands.car, callingForm, newFrame, step3)
-        return self.processBindingVariables(operands.car, callingForm, frame, Frame(frame), step2)
+        return self.processBindingVariables(operands.car, callingForm, frame, Frame.make(frame), step2)
         
     def processBindingVariables(self, bindings, callingForm, oldFrame, newFrame, cont):
         if bindings.isNull():
@@ -1387,12 +1364,14 @@ class LetrecStarForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
         if binding.car.name in newFrame.symbols:
             raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
-        newFrame.symbols[binding.car.name] = Nil.make()
+        newFrame.setSymbolValue(binding.car, Nil.make())
+        #newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
 
     def evalInits(self, bindings, callingForm, frame, cont):
         def step2(bindingValue):
-            frame.symbols[bindings.car.car.name] = bindingValue
+            frame.setSymbolValue(bindings.car.car, bindingValue)
+            #frame.symbols[bindings.car.car.name] = bindingValue
             return self.evalInits(bindings.cdr, callingForm, frame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, frame)
@@ -1486,78 +1465,12 @@ class PrimitiveProcedure(Procedure):
     
     object = None
 
-    primitiveFunctions = {
-        #pairs
-        'null?':            lambda: IsNullProcedure.make(),
-        'pair?':            lambda: IsPairProcedure.make(),
-        'cons':             lambda: ConsProcedure.make(),
-        'car':              lambda: CarProcedure.make(),
-        'cdr':              lambda: CdrProcedure.make(),
-        'append2':          lambda: Append2Procedure.make(),
-        #boolean
-        'eq?':              lambda: EqProcedure.make(),
-        'eqv?':             lambda: EqvProcedure.make(),
-        'equal?':           lambda: EqualProcedure.make(),
-        'not':              lambda: NotProcedure.make(),
-        #numbers
-        '=':                lambda: NumEqProcedure.make(),
-        '<':                lambda: NumLTProcedure.make(),
-        '<=':               lambda: NumLTEProcedure.make(),
-        '>':                lambda: NumGTProcedure.make(),
-        '>=':               lambda: NumGTEProcedure.make(),
-        '+':                lambda: SumProcedure.make(),
-        '-':                lambda: SubtractProcedure.make(),
-        '*':                lambda: MultiplyProcedure.make(),
-        '/':                lambda: DivideProcedure.make(),
-        'quotient':         lambda: QuotientProcedure.make(),
-        'modulo':           lambda: ModuloProcedure.make(),
-        'remainder':        lambda: RemainderProcedure.make(),
-        #characters
-        'char?':            lambda: IsCharProcedure.make(),
-        'char-alphabetic?': lambda: IsCharAlphabeticProcedure.make(),
-        'char-numeric?':    lambda: IsCharNumericProcedure.make(),
-        'char-whitespace?': lambda: IsCharWhitespaceProcedure.make(),
-        'char-upper-case?': lambda: IsCharUpperCaseProcedure.make(),
-        'char-lower-case?': lambda: IsCharLowerCaseProcedure.make(),
-        'char=?':           lambda: IsCharEqProcedure.make(),
-        'char<?':           lambda: IsCharLTProcedure.make(),
-        'char>?':           lambda: IsCharGTProcedure.make(),
-        'char<=?':          lambda: IsCharLTEProcedure.make(),
-        'char>=?':          lambda: IsCharGTEProcedure.make(),
-        'char->integer':    lambda: CharToIntegerProcedure.make(),
-        'integer->char':    lambda: IntegerToCharProcedure.make(),
-        'char-upcase':      lambda: CharUpCaseProcedure.make(),
-        'char-downcase':    lambda: CharDownCaseProcedure.make(),
-        'char-foldcase':    lambda: CharFoldCaseProcedure.make(),
-        #strings
-        'string?':          lambda: IsStringProcedure.make(),
-        'string':           lambda: StringProcedure.make(),
-        'make-string':      lambda: StringMakeProcedure.make(),
-        'string-length':    lambda: StringLengthProcedure.make(),
-        #io
-        'write-char':       lambda: WriteCharProcedure.make(),
-        'display':          lambda: DisplayProcedure.make(),
-        #evaluation
-        'procedure?':       lambda: IsProcedureProcedure.make(),
-        'apply2':           lambda: Apply2Procedure.make(),
-        'call-with-current-continuation': lambda: CallCCProcedure.make(),
-        'call/cc':          lambda: CallCCProcedure.make(),
-    }
-
     @classmethod
     def make(cls):
         if not cls.object:
             cls.object = cls()
         return cls.object
     
-    @classmethod
-    def resolveSymbol(cls, symbol):
-        if not symbol.name in cls.primitiveFunctions:
-            raise SchemeError(callingForm, 'Undefined primitive function %s.' % symbol.name)
-        function = cls.primitiveFunctions[symbol.name]()
-        function.name = symbol.name
-        return function
-
     def __str__(self):
         return '#<primitive:%s>' % self.name
     
@@ -2061,29 +1974,27 @@ class Frame(SExpression):
     __slots__ = ['parentFrame', 'symbols']
     typeName = 'an environment frame'
     
-    def __init__(self, parentFrame=None):
+    @classmethod
+    def make(cls, parentFrame):
+        #if cls.cache:
+        #    return cls.cache
+        self = cls()
+        #cls.cache = self
         self.parentFrame = parentFrame
         self.symbols = {}
-                
+        return self
+
     def resolveSymbol(self, symbol):
         if symbol.name in self.symbols:
             return self.symbols[symbol.name]
-        elif self.parentFrame:
-            return self.parentFrame.resolveSymbol(symbol)
-        elif symbol.name in PrimitiveProcedure.primitiveFunctions:
-            return PrimitiveProcedure.resolveSymbol(symbol)
-        else:
-            raise SchemeError(symbol, 'Undefined symbol "' + symbol.name + '"')
+        return self.parentFrame.resolveSymbol(symbol)
 
     def resolveSymbolLocation(self, symbol):
         if symbol.name in self.symbols:
             return self.symbols
-        elif self.parentFrame:
-            return self.parentFrame.resolveSymbolLocation(symbol)
-        else:
-            return None
+        return self.parentFrame.resolveSymbolLocation(symbol)
         
-    def addSymbol(self, symbol, value):
+    def setSymbolValue(self, symbol, value):
         self.symbols[symbol.name] = value
         
     def evaluateExpressions(self, expressions):
@@ -2105,6 +2016,118 @@ class Frame(SExpression):
 
     def __str__(self):
         return '#<env-frame 0x%x>' % id(self)
+
+class NullFrame(Frame):
+    __slots__ = []
+    typeName = 'a null environment frame'
+    #cache = None
+
+    @classmethod
+    def make(cls):
+        #if cls.cache:
+        #    return cls.cache
+        self = cls()
+        #cls.cache = self
+        self.symbols = {
+            #pairs
+            'null?':            IsNullProcedure.make(),
+            'pair?':            IsPairProcedure.make(),
+            'cons':             ConsProcedure.make(),
+            'car':              CarProcedure.make(),
+            'cdr':              CdrProcedure.make(),
+            'append2':          Append2Procedure.make(),
+            #boolean
+            'eq?':              EqProcedure.make(),
+            'eqv?':             EqvProcedure.make(),
+            'equal?':           EqualProcedure.make(),
+            'not':              NotProcedure.make(),
+            #numbers
+            '=':                NumEqProcedure.make(),
+            '<':                NumLTProcedure.make(),
+            '<=':               NumLTEProcedure.make(),
+            '>':                NumGTProcedure.make(),
+            '>=':               NumGTEProcedure.make(),
+            '+':                SumProcedure.make(),
+            '-':                SubtractProcedure.make(),
+            '*':                MultiplyProcedure.make(),
+            '/':                DivideProcedure.make(),
+            'quotient':         QuotientProcedure.make(),
+            'modulo':           ModuloProcedure.make(),
+            'remainder':        RemainderProcedure.make(),
+            #characters
+            'char?':            IsCharProcedure.make(),
+            'char-alphabetic?': IsCharAlphabeticProcedure.make(),
+            'char-numeric?':    IsCharNumericProcedure.make(),
+            'char-whitespace?': IsCharWhitespaceProcedure.make(),
+            'char-upper-case?': IsCharUpperCaseProcedure.make(),
+            'char-lower-case?': IsCharLowerCaseProcedure.make(),
+            'char=?':           IsCharEqProcedure.make(),
+            'char<?':           IsCharLTProcedure.make(),
+            'char>?':           IsCharGTProcedure.make(),
+            'char<=?':          IsCharLTEProcedure.make(),
+            'char>=?':          IsCharGTEProcedure.make(),
+            'char->integer':    CharToIntegerProcedure.make(),
+            'integer->char':    IntegerToCharProcedure.make(),
+            'char-upcase':      CharUpCaseProcedure.make(),
+            'char-downcase':    CharDownCaseProcedure.make(),
+            #'char-foldcase':    CharFoldCaseProcedure.make(),
+            #strings
+            'string?':          IsStringProcedure.make(),
+            'string':           StringProcedure.make(),
+            'make-string':      StringMakeProcedure.make(),
+            'string-length':    StringLengthProcedure.make(),
+            #io
+            'write-char':       WriteCharProcedure.make(),
+            'display':          DisplayProcedure.make(),
+            #evaluation
+            'procedure?':       IsProcedureProcedure.make(),
+            'apply2':           Apply2Procedure.make(),
+            'call-with-current-continuation': CallCCProcedure.make(),
+            'call/cc':          CallCCProcedure.make(),
+            #syntax
+            'quote':            QuoteForm.make(),
+            'quasiquote':       QuasiQuoteForm.make(),
+            'unquote':          UnQuoteForm.make(),
+            'unquote-splicing': UnQuoteSplicingForm.make(),
+            'define':           DefineForm.make(),
+            'lambda':           LambdaForm.make(),
+            'let':              LetForm.make(),
+            'let*':             LetStarForm.make(),
+            'letrec':           LetrecForm.make(),
+            'letrec*':          LetrecStarForm.make(),
+            'set!':             SetForm.make(),
+            #'set-car!':         SetCarForm.make(),
+            #'set-cdr!':         SetCdrForm.make(),
+            'if':               IfForm.make(),
+            'cond':             CondForm.make(),
+            #'case':             CaseForm.make(),
+            'and':              AndForm.make(),
+            'or':               OrForm.make(),
+            #compile/expand time syntax
+            'define-syntax':    DefineSyntaxForm.make(),
+            #special symbols
+            'else':             ElseIdentifier.make(),
+            '=>':               EGTIdentifier.make(),
+            }
+        for s in self.symbols:
+            #print(s)
+            self.symbols[s].name = s
+        return self
+
+    def resolveSymbol(self, symbol):
+        if symbol.name in self.symbols:
+            return self.symbols[symbol.name]
+        else:
+            raise SchemeError(symbol, 'Undefined symbol "' + symbol.name + '"')
+
+    def resolveSymbolLocation(self, symbol):
+        if symbol.name in self.symbols:
+            return self.symbols
+        else:
+            return None
+        
+    def __str__(self):
+        return '#<null-env-frame>'
 
 class Parser(object):
     def __init__(self, fileName):
@@ -2192,7 +2215,7 @@ if __name__ == "__main__":
         for element in generator: pass
             
     import os
-    frame = Frame()
+    frame = NullFrame.make()
     fname = os.path.join(os.path.dirname(__file__), 'boot.scm')
     parser = Parser(fname)
     with open(fname, 'r') as f:

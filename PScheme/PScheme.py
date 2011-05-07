@@ -1414,27 +1414,47 @@ class CondForm(SpecialSyntax):
     def apply(self, operands, callingForm, frame, cont):
         if operands.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 1 operand, given %d.' % (self.name, len(operands)))
-        def step2(clause):
-            if clause.isPair():
-                return clause.cdr.car.eval(frame, cont)
-            else:
-                return Trampolined.make(cont, clause)
-        return self.processClauses(operands, callingForm, frame, step2)
+        return self.processClauses(operands, callingForm, frame, cont)
 
     def processClauses(self, clauses, callingForm, frame, cont):
+        def step2(boolValue):
+            if clauses.cdr.isPair() and isinstance(boolValue, ElseIdentifier):
+                raise SchemeError(clause, '"%s": "else" not at tail position.' % self.name)
+            if (not boolValue.isBoolean() or boolValue.value == True):
+                return self.processClause(boolValue, clauses.car, callingForm, frame, cont)
+            else:
+                return self.processClauses(clauses.cdr, callingForm, frame, cont)
         if clauses.isNull():
             return Trampolined.make(cont, Nil.make())
         clause = clauses.car
-        if not clause.isPair() or not clause.cdr.isPair() or not clause.cdr.cdr.isNull():
-            raise SchemeError(clause, '"%s": invalid clause format.' % self.name)
-        def step2(boolValue):
-            if (not boolValue.isBoolean() or boolValue.value == True):
-                return Trampolined.make(cont, clause)
-            else:
-                return self.processClauses(clauses.cdr, callingForm, frame, cont)
-        if clauses.cdr.isNull() and clause.car.isSymbol() and clause.car.name == 'else':
-            return Trampolined.make(cont, clause)
+        if not clause.isPair():
+            raise SchemeError(clause, '"%s": invalid clause syntax.' % self.name)
         return clause.car.eval(frame, step2)
+
+    def processClause(self, test, clause, callingForm, frame, cont):
+        ccdr = clause.cdr
+        if ccdr.isNull():
+            if isinstance(test, ElseIdentifier):
+                raise SchemeError(clause, '"%s": not enough elements in the "else" clause.' % self.name)
+            return Trampolined.make(cont, test)
+        if not ccdr.isList():
+            raise SchemeError(clause, '"%s": invalid clause syntax.' % self.name)
+        def step2(second):
+            def step3(third):
+                if third.isProcedure() and third.operandsNo == [1,1]:
+                    return third.checkAndApply(Pair.make(test, Null.make()), callingForm, cont)
+                raise SchemeError(clause, '"%s": last operand in "=>" clause is not a single-operand procedure.' % self.name)
+            if isinstance(second, EGTIdentifier):
+                if (ccdr.cdr.isNull() or ccdr.cdr.cdr.isPair()):
+                    raise SchemeError(clause, '"%s": wrong number of elements in "=>" clause.' % self.name)
+                if isinstance(test, ElseIdentifier):
+                    raise SchemeError(clause, '"%s": "=>" is not allowed in "else" clause.' % self.name)
+                return ccdr.cdr.car.eval(frame, step3)
+            elif ccdr.cdr.isNull():
+                return Trampolined.make(cont, second)
+            else:
+                return ccdr.cdr.evalSequence(frame, cont)
+        return ccdr.car.eval(frame, step2)
 
 class AndForm(SpecialSyntax):
     "Implements a :c:macro:`and` form."
@@ -1459,6 +1479,32 @@ class OrForm(SpecialSyntax):
             else:
                 return self.apply(operands.cdr, callingForm, frame, cont)
         return operands.car.eval(frame, step2)
+
+class SpecialIdentifier(SExpression):
+    "Implements a base class for special identifiers."
+    __slots__ = ['name']
+    cache = None
+    typeName = 'an else identifier'
+        
+    @classmethod
+    def make(cls):
+        if cls.cache:
+            return cls.cache
+        self = cls()
+        cls.cache = self
+        return self
+    
+    def eval(self, frame, cont):
+        raise SchemeError(self, '%s: invalid context.' % self.name)
+    
+    def __str__(self):
+        return '#<%s>' % self.name
+    
+class ElseIdentifier(SpecialIdentifier):
+    "Implements an :c:macro:`else` identifier."
+    
+class EGTIdentifier(SpecialIdentifier):
+    "Implements an :c:macro:`=>` identifier."
     
 class PrimitiveProcedure(Procedure):
     typeName = 'a primitive procedure'

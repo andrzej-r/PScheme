@@ -2150,7 +2150,7 @@ class NullFrame(Frame):
             'and':              AndForm.make(),
             'or':               OrForm.make(),
             #compile/expand time syntax
-            'define-syntax':    DefineSyntaxForm.make(),
+            #'define-syntax':    DefineSyntaxForm.make(),
             #special symbols
             'else':             ElseIdentifier.make(),
             '=>':               EGTIdentifier.make(),

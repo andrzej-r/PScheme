@@ -1026,19 +1026,6 @@ class CompoundProcedure(Procedure):
         else:
             raise SchemeError(callingForm, 'Wrong number of operands, required at least ' + str(len(self.formals) - 1) + '.')
         
-    def bind_(self, formals, operands, callingForm, frame, cont):
-        if operands.isNull() and formals.isPair():
-            raise SchemeError(callingForm, 'Wrong number of operands, required ' + str(len(self.formals)) + '.')
-        if operands.isNull() and formals.isNull():
-            return Trampolined.make(cont, frame)
-        if formals.isSymbol():
-            frame.setSymbolValue(formals, operands)
-            return Trampolined.make(cont, frame)
-        if operands.isPair() and formals.isPair() and formals.car.isSymbol():
-            frame.setSymbolValue(formals.car, operands.car)
-            return self.bind(formals.cdr, operands.cdr, callingForm, frame, cont)
-        raise SchemeError(callingForm, 'Wrong format of operands.')
-        
     def apply(self, operands, callingForm, cont):
         def step2(newFrame):
             return self.body.evalSequence(callingForm, newFrame, cont)

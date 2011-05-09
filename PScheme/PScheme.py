@@ -162,8 +162,8 @@ class SExpression(object):
             raise(SchemeError(token, 'Unrecognized token "' + text + '"'))
         return expr
             
-    def eval(self, frame, cont):
-        raise SchemeError(self, 'Abstract SExpression should not be evaluated directly')
+    def eval(self, callingForm, frame, cont):
+        raise SchemeError(callingForm, 'Abstract SExpression should not be evaluated directly')
     
     def __ne__(self, other):
         return not (self == other)
@@ -238,7 +238,7 @@ class SelfEval(SExpression):
     __slots__ = ['value']
     typeName = 'a self-evaluating expression'
     
-    def eval(self, frame, cont):
+    def eval(self, callingForm, frame, cont):
         return Trampolined.make(cont, self)
         #return self
         
@@ -610,8 +610,8 @@ class Symbol(SExpression):
         #sym = Symbol.makeUnCached(token.text, token.meta)
         return sym
         
-    def eval(self, frame, cont):
-        return Trampolined.make(cont, frame.resolveSymbol(self))
+    def eval(self, callingForm, frame, cont):
+        return Trampolined.make(cont, frame.resolveSymbol(self, callingForm))
 
     def isSymbol(self):
         return True
@@ -645,10 +645,10 @@ class Null(List):
     #    self.meta = meta
     #    return self
     
-    def eval(self, frame, cont):
-        raise SchemeError(self, 'Empty application.')
+    def eval(self, callingForm, frame, cont):
+        raise SchemeError(callingForm, 'Empty application.')
 
-    def evalElements(self, frame, cont, excp=None):
+    def evalElements(self, callingForm, frame, cont, excp=None):
         return Trampolined.make(cont, self)
         
     def append(self, pair):
@@ -781,40 +781,40 @@ class Pair(List):
             return lst
         return lst + [cdr]
         
-    def eval(self, frame, cont):
+    def eval(self, callingForm, frame, cont):
         def step2(operator):
             def step3(operands):
                 return operator.checkAndApply(operands, self, cont)
             if not operator.isProcedure():
                 raise SchemeError(self, 'procedure application, first operand is not a procedure.')
-            return self.cdr.evalElements(frame, step3, SchemeError(self, '"eval": improper operand list'))
-        if self.car.isSymbol() and isinstance(frame.resolveSymbol(self.car), SpecialSyntax):
-            return frame.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
-        #    return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
+            return self.cdr.evalElements(callingForm, frame, step3, SchemeError(self, '"eval": improper operand list'))
+        if self.car.isSymbol() and isinstance(frame.resolveSymbol(self.car, callingForm), SpecialSyntax):
+            return frame.resolveSymbol(self.car, callingForm).apply(self.cdr, self, frame, cont)
+        #    return SpecialSyntax.resolveSymbol(self.car, callingForm).apply(self.cdr, self, frame, cont)
         #if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms and frame.resolveSymbolLocation(self.car) == None:
-        #    return SpecialSyntax.resolveSymbol(self.car).apply(self.cdr, self, frame, cont)
-        return self.car.eval(frame, step2)
+        #    return SpecialSyntax.resolveSymbol(self.car, callingForm).apply(self.cdr, self, frame, cont)
+        return self.car.eval(callingForm, frame, step2)
 
-    def evalElements(self, frame, cont, excp=None):
+    def evalElements(self, callingForm, frame, cont, excp=None):
         def step2(car):
             def step3(cdr):
                 return Trampolined.make(cont, Pair.make(car, cdr))
             if self.cdr.isPair() or self.cdr.isNull():
-                return self.cdr.evalElements(frame, step3, excp)
+                return self.cdr.evalElements(callingForm, frame, step3, excp)
             else:
                 if excp:
                     raise excp
                 else:
-                    return self.cdr.eval(frame, step3)
-        return self.car.eval(frame, step2)
+                    return self.cdr.eval(callingForm, frame, step3)
+        return self.car.eval(callingForm, frame, step2)
 
-    def evalSequence(self, frame, cont):
+    def evalSequence(self, callingForm, frame, cont):
         def step2(car):
-            return self.cdr.evalSequence(frame, cont)
+            return self.cdr.evalSequence(callingForm, frame, cont)
         if self.cdr.isNull():
-            return self.car.eval(frame, cont)
+            return self.car.eval(callingForm, frame, cont)
         else:
-            return self.car.eval(frame, step2)
+            return self.car.eval(callingForm, frame, step2)
         
     def isPair(self):
         return True
@@ -922,8 +922,8 @@ class Procedure(SExpression):
     def isProcedure(self):
         return True
 
-    def eval(self, frame, cont):
-        raise SchemeError(self, 'Procedure should not be evaluated directly')
+    def eval(self, callingForm, frame, cont):
+        raise SchemeError(callingForm, 'Procedure should not be evaluated directly')
 
     def checkAndApply(self, operands, callingForm, cont):
         lenOperands = len(operands)
@@ -1041,7 +1041,7 @@ class CompoundProcedure(Procedure):
         
     def apply(self, operands, callingForm, cont):
         def step2(newFrame):
-            return self.body.evalSequence(newFrame, cont)
+            return self.body.evalSequence(callingForm, newFrame, cont)
         return self.bind(self.formals, operands, callingForm, Frame.make(self.frame), step2)
     
     def __str__(self):
@@ -1063,7 +1063,7 @@ class Trampolined(SExpression):
     def isTrampolined(self):
         return True
 
-    def eval(self, frame, cont):
+    def eval(self, callingForm, frame, cont):
         return self.continuation(self.operand)
 
     def __str__(self):
@@ -1080,8 +1080,8 @@ class SpecialSyntax(SExpression):
             cls.object = cls()
         return cls.object
             
-    def eval(self, frame, cont):
-        raise SchemeError(self, 'Special syntax should not be evaluated directly')
+    def eval(self, callingForm, frame, cont):
+        raise SchemeError(callingForm, 'Special syntax should not be evaluated directly')
     
     def apply(self, operands, callingForm, frame, cont):
         pass
@@ -1122,11 +1122,11 @@ class QuotedForm(SpecialSyntax):
                     return self.processExpression(expr.cdr, callingForm, frame, step3)
             expr.quasiquoteLevel = callingForm.quasiquoteLevel
             if expr.car.isSymbol() and expr.car.name == 'quasiquote':
-                return expr.eval(frame, cont)
+                return expr.eval(callingForm, frame, cont)
             if expr.car.isSymbol() and expr.car.name == 'unquote':
-                return expr.eval(frame, cont)
+                return expr.eval(callingForm, frame, cont)
             if expr.car.isSymbol() and expr.car.name == 'unquote-splicing':
-                return expr.eval(frame, cont)
+                return expr.eval(callingForm, frame, cont)
             return self.processExpression(expr.car, callingForm, frame, step2)
 
 class QuasiQuoteForm(QuotedForm):
@@ -1163,7 +1163,7 @@ class UnQuoteForm(QuotedForm):
         if callingForm.quasiquoteLevel < 0:
             raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
         if callingForm.quasiquoteLevel == 0:
-            return operands.car.eval(frame, cont)
+            return operands.car.eval(callingForm, frame, cont)
         else:
             return self.processExpression(operands.car, callingForm, frame, step2)
 
@@ -1189,7 +1189,7 @@ class UnQuoteSplicingForm(QuotedForm):
         if callingForm.quasiquoteLevel < 0:
             raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
         if callingForm.quasiquoteLevel == 0:
-            return operands.car.eval(frame, evaluated)
+            return operands.car.eval(callingForm, frame, evaluated)
         else:
             return self.processExpression(operands.car, callingForm, frame, expanded)
 
@@ -1207,7 +1207,7 @@ class DefineForm(SpecialSyntax):
             def step2(value):
                 frame.setSymbolValue(firstArg, value)
                 return Trampolined.make(cont, Nil.make())
-            return operands.cdr.car.eval(frame, step2)
+            return operands.cdr.car.eval(callingForm, frame, step2)
         if firstArg.isPair():
             if not firstArg.car.isSymbol():
                 raise SchemeError(callingForm, 'Invalid procedure name in "%s"' % self.name)
@@ -1236,7 +1236,7 @@ class LetForm(SpecialSyntax):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
-            return operands.cdr.evalSequence(newFrame, cont)
+            return operands.cdr.evalSequence(callingForm, newFrame, cont)
         return self.processBindings(operands.car, callingForm, frame, Frame.make(frame), step2)
         
     def processBindings(self, bindings, callingForm, oldFrame, newFrame, cont):
@@ -1257,7 +1257,7 @@ class LetForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s": each binding form must consist of 2 elements, given %d.' % (self.name, len(binding)))
-        return binding.cdr.car.eval(oldFrame, step2)
+        return binding.cdr.car.eval(callingForm, oldFrame, step2)
 
 class LetStarForm(SpecialSyntax):
     "Implements a :c:macro:`let*` form."
@@ -1265,7 +1265,7 @@ class LetStarForm(SpecialSyntax):
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
-            return operands.cdr.evalSequence(newFrame, cont)
+            return operands.cdr.evalSequence(callingForm, newFrame, cont)
         return self.processBindings(operands.car, callingForm, frame, step2)
         
     def processBindings(self, bindings, callingForm, frame, cont):
@@ -1287,7 +1287,7 @@ class LetStarForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s": invalid binding form (not a list).' % self.name)
         if not binding.cdr.isPair() or binding.cdr.cdr.isPair():
             raise SchemeError(callingForm, '"%s": each binding form must consist of 2 elements, given %d.' % (self.name, len(binding)))
-        return binding.cdr.car.eval(frame, step2)
+        return binding.cdr.car.eval(callingForm, frame, step2)
 
 class LetrecForm(SpecialSyntax):
     "Implements a :c:macro:`letrec` form."
@@ -1297,7 +1297,7 @@ class LetrecForm(SpecialSyntax):
         def step2(newFrame):
             def step3(inits):
                 def step4(newFrame2):
-                    return operands.cdr.evalSequence(newFrame2, cont)
+                    return operands.cdr.evalSequence(callingForm, newFrame2, cont)
                 return self.bindValues(operands.car, inits, callingForm, newFrame, step4)
             return self.evalInits(operands.car, callingForm, newFrame, step3)
         return self.processBindingVariables(operands.car, callingForm, frame, Frame.make(frame), step2)
@@ -1319,7 +1319,7 @@ class LetrecForm(SpecialSyntax):
         newFrame.setSymbolValue(binding.car, Nil.make())
         #newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
-        #return binding.cdr.car.eval(oldFrame, step2)
+        #return binding.cdr.car.eval(callingForm, oldFrame, step2)
 
     def evalInits(self, bindings, callingForm, frame, cont):
         def step2(initValue):
@@ -1328,7 +1328,7 @@ class LetrecForm(SpecialSyntax):
             return self.evalInits(bindings.cdr, callingForm, frame, step3)
         if bindings.isNull():
             return Trampolined.make(cont, Null.make())
-        return bindings.car.cdr.car.eval(frame, step2)
+        return bindings.car.cdr.car.eval(callingForm, frame, step2)
 
     def bindValues(self, bindings, inits, callingForm, frame, cont):
         if bindings.isNull():
@@ -1346,7 +1346,7 @@ class LetrecStarForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         def step2(newFrame):
             def step3(newFrame2):
-                return operands.cdr.evalSequence(newFrame2, cont)
+                return operands.cdr.evalSequence(callingForm, newFrame2, cont)
             return self.evalInits(operands.car, callingForm, newFrame, step3)
         return self.processBindingVariables(operands.car, callingForm, frame, Frame.make(frame), step2)
         
@@ -1375,7 +1375,7 @@ class LetrecStarForm(SpecialSyntax):
             return self.evalInits(bindings.cdr, callingForm, frame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, frame)
-        return bindings.car.cdr.car.eval(frame, step2)
+        return bindings.car.cdr.car.eval(callingForm, frame, step2)
 
 
 class SetForm(SpecialSyntax):
@@ -1392,7 +1392,7 @@ class SetForm(SpecialSyntax):
         def step2(value):
             targetFrame[var.name] = value
             return Trampolined.make(cont, Nil.make())
-        return operands.cdr.car.eval(frame, step2)
+        return operands.cdr.car.eval(callingForm, frame, step2)
 
 class IfForm(SpecialSyntax):
     "Implements a :c:macro:`if` form."
@@ -1401,13 +1401,13 @@ class IfForm(SpecialSyntax):
             raise SchemeError(callingForm, '"%s" requires 2 or 3 operands, given %d.' % (self.name, len(operands)))
         def step2(predicate):
             if not predicate.isBoolean() or predicate.value: #True
-                res = operands.cdr.car.eval(frame, cont)
+                res = operands.cdr.car.eval(callingForm, frame, cont)
             elif operands.cdr.cdr.isPair():
-                res = operands.cdr.cdr.car.eval(frame, cont)
+                res = operands.cdr.cdr.car.eval(callingForm, frame, cont)
             else:
                 res = Trampolined.make(cont, Nil.make())
             return res
-        return operands.car.eval(frame, step2)
+        return operands.car.eval(callingForm, frame, step2)
 
 class CondForm(SpecialSyntax):
     "Implements a :c:macro:`cond` form."
@@ -1429,7 +1429,7 @@ class CondForm(SpecialSyntax):
         clause = clauses.car
         if not clause.isPair():
             raise SchemeError(clause, '"%s": invalid clause syntax.' % self.name)
-        return clause.car.eval(frame, step2)
+        return clause.car.eval(callingForm, frame, step2)
 
     def processClause(self, test, clause, callingForm, frame, cont):
         ccdr = clause.cdr
@@ -1449,12 +1449,12 @@ class CondForm(SpecialSyntax):
                     raise SchemeError(clause, '"%s": wrong number of elements in "=>" clause.' % self.name)
                 if isinstance(test, ElseIdentifier):
                     raise SchemeError(clause, '"%s": "=>" is not allowed in "else" clause.' % self.name)
-                return ccdr.cdr.car.eval(frame, step3)
+                return ccdr.cdr.car.eval(callingForm, frame, step3)
             elif ccdr.cdr.isNull():
                 return Trampolined.make(cont, second)
             else:
-                return ccdr.cdr.evalSequence(frame, cont)
-        return ccdr.car.eval(frame, step2)
+                return ccdr.cdr.evalSequence(callingForm, frame, cont)
+        return ccdr.car.eval(callingForm, frame, step2)
 
 class AndForm(SpecialSyntax):
     "Implements a :c:macro:`and` form."
@@ -1466,7 +1466,7 @@ class AndForm(SpecialSyntax):
                 return Trampolined.make(cont, result)
             else:
                 return self.apply(operands.cdr, callingForm, frame, cont)
-        return operands.car.eval(frame, step2)
+        return operands.car.eval(callingForm, frame, step2)
     
 class OrForm(SpecialSyntax):
     "Implements a :c:macro:`or` form."
@@ -1478,7 +1478,7 @@ class OrForm(SpecialSyntax):
                 return Trampolined.make(cont, result)
             else:
                 return self.apply(operands.cdr, callingForm, frame, cont)
-        return operands.car.eval(frame, step2)
+        return operands.car.eval(callingForm, frame, step2)
 
 class SpecialIdentifier(SExpression):
     "Implements a base class for special identifiers."
@@ -2030,10 +2030,10 @@ class Frame(SExpression):
         self.symbols = {}
         return self
 
-    def resolveSymbol(self, symbol):
+    def resolveSymbol(self, symbol, callingForm):
         if symbol.name in self.symbols:
             return self.symbols[symbol.name]
-        return self.parentFrame.resolveSymbol(symbol)
+        return self.parentFrame.resolveSymbol(symbol, callingForm)
 
     def resolveSymbolLocation(self, symbol):
         if symbol.name in self.symbols:
@@ -2049,11 +2049,11 @@ class Frame(SExpression):
             try:
                 def processResult(result):
                     return result
-                result = expression.eval(self, processResult)
+                result = expression.eval(expression, self, processResult)
                 while result.isTrampolined():
                     #print(result.operand)
                     #print(result)
-                    result = result.eval(self, processResult)
+                    result = result.eval(expression, self, processResult)
                 yield result
             except SchemeError as e:
                 yield ErrorExpression.make(e)
@@ -2160,11 +2160,11 @@ class NullFrame(Frame):
             self.symbols[s].name = s
         return self
 
-    def resolveSymbol(self, symbol):
+    def resolveSymbol(self, symbol, callingForm):
         if symbol.name in self.symbols:
             return self.symbols[symbol.name]
         else:
-            raise SchemeError(symbol, 'Undefined symbol "' + symbol.name + '"')
+            raise SchemeError(callingForm, 'Undefined symbol "' + symbol.name + '"')
 
     def resolveSymbolLocation(self, symbol):
         if symbol.name in self.symbols:

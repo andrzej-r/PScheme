@@ -1437,9 +1437,9 @@ class CondForm(SpecialSyntax):
             raise SchemeError(clause, '"%s": invalid clause syntax.' % self.name)
         def step2(second):
             def step3(third):
-                if third.isProcedure() and third.operandsNo == [1,1]:
+                if third.isProcedure():
                     return third.checkAndApply(Pair.make(test, Null.make()), callingForm, cont)
-                raise SchemeError(clause, '"%s": last operand in "=>" clause is not a single-operand procedure.' % self.name)
+                raise SchemeError(clause, '"%s": last operand in "=>" clause is not a procedure.' % self.name)
             if isinstance(second, EGTIdentifier):
                 if (ccdr.cdr.isNull() or ccdr.cdr.cdr.isPair()):
                     raise SchemeError(clause, '"%s": wrong number of elements in "=>" clause.' % self.name)

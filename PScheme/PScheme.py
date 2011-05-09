@@ -880,9 +880,9 @@ class Pair(List):
                 return '\'' + repr(self.cdr.car)
             if s == 'quasiquote':
                 return '`' + repr(self.cdr.car)
-            if s == 'unquote':
+            if s == 'unquote' and len(self) == 2:
                 return ',' + repr(self.cdr.car)
-            if s == 'unquote-splicing':
+            if s == 'unquote-splicing' and len(self) == 2:
                 return ',@' + repr(self.cdr.car)
         string = '(' + repr(self.car)
         cdr = self.cdr
@@ -1158,8 +1158,6 @@ class UnQuoteForm(QuotedForm):
             form.quasiquoteLevel = callingForm.quasiquoteLevel
             return Trampolined.make(cont, form)
         callingForm.quasiquoteLevel -= 1
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, given. %d' % (self.name, len(operands)))
         if callingForm.quasiquoteLevel < 0:
             raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
         if callingForm.quasiquoteLevel == 0:
@@ -1184,8 +1182,6 @@ class UnQuoteSplicingForm(QuotedForm):
             form.quasiquoteLevel = callingForm.quasiquoteLevel
             return Trampolined.make(cont, form)
         callingForm.quasiquoteLevel -= 1
-        if operands.isNull() or operands.cdr.isPair():
-            raise SchemeError(callingForm, '"%s" requires 1 operand, given. %d' % (self.name, len(operands)))
         if callingForm.quasiquoteLevel < 0:
             raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
         if callingForm.quasiquoteLevel == 0:

@@ -65,10 +65,10 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(e, [Pair.makeFromList([Symbol.make('+'), Number.make(123.), Number.make(123)])])
         e = self.tp('-12.345e-6 -.12e3 +123.e+4 -1234 +12 (+ 123.0 123)')
         self.assertEqual(e, [Number.make(-12.345e-6), Number.make(-0.12e3), Number.make(123e4), Number.make(-1234), Number.make(12), Pair.makeFromList([Symbol.make('+'), Number.make(123.), Number.make(123)])])
-        e = self.tp('"asd" "asd\\"dsa"')
-        self.assertEqual(e, [String.make('asd',), String.make('asd\\"dsa')])
+        e = self.tp(r'"asd" "asd\"dsa"')
+        self.assertEqual(e, [String.make('asd',), String.make(r'asd"dsa')])
         #self.assertRaises(ErrorExpression, lambda: list(f.read('"asd" "asd\\"dsa""123', t))) #unterminated string, changed error handling
-        e = self.tp('"asd" "asd\\"dsa""123')
+        e = self.tp(r'"asd" "asd\"dsa""123')
         self.assertEqual(list(map(type, e)), [String, String, ErrorExpression])
         e = self.tp('#t #f')
         self.assertEqual(e, [Boolean.make(True), Boolean.make(False)])
@@ -219,6 +219,32 @@ class PSchemeTest(unittest.TestCase):
     ((w y) 'semivowel)
     (else 'consonant))        """
         #self.assertEqual(self.tpe(s), [Symbol.make('consonant')])
+
+        self.assertEqual(type(self.tpe("(cond)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(cond 1)")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(cond (#f) (else))")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(cond (#f) . (else #t))")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("(cond (#t) . (else #f))"), ['#t'])
+
+        self.assertEqual(self.tpes("(cond (#t) (else #f))"), ['#t'])
+        self.assertEqual(self.tpes("(cond (1 #t) (else #f))"), ['#t'])
+        self.assertEqual(self.tpes("(cond (1 2 #t) (else #f))"), ['#t'])
+        self.assertEqual(type(self.tpe("(cond (1 2 . #f))")[0]), ErrorExpression)
+        
+        self.assertEqual(type(self.tpe("(cond (else #t) (else #f))")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("(let ((else #t)) (cond (else) (else #f)))"), ['#t'])
+
+        self.assertEqual(self.tpes("(cond (1 => -))"), ['-1'])
+        self.assertEqual(type(self.tpe("(cond (1 => 2))")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(cond (1 => cons))")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(cond (1 =>))")[0]), ErrorExpression)
+        self.assertEqual(type(self.tpe("(cond (1 => 1 2))")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("(let ((=> 0)) (cond (1 => 2)))"), ['2'])
+
+        self.assertEqual(type(self.tpe("(cond (else => 2))")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("(let ((=> 0)) (cond (else => 2)))"), ['2'])
+        self.assertEqual(self.tpes("(let ((else #t)) (cond (else => not)))"), ['#f'])
+
         self.assertEqual(self.tpes("(and (= 2 2) (> 2 1))"), ['#t'])
         self.assertEqual(self.tpes("(and (= 2 2) (< 2 1))"), ['#f'])
         self.assertEqual(self.tpes("(and 1 2 'c '(f g))"), ['(f g)'])

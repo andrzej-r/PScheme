@@ -880,9 +880,9 @@ class Pair(List):
                 return '\'' + repr(self.cdr.car)
             if s == 'quasiquote':
                 return '`' + repr(self.cdr.car)
-            if s == 'unquote' and len(self) == 2:
+            if s == 'unquote':
                 return ',' + repr(self.cdr.car)
-            if s == 'unquote-splicing' and len(self) == 2:
+            if s == 'unquote-splicing':
                 return ',@' + repr(self.cdr.car)
         string = '(' + repr(self.car)
         cdr = self.cdr

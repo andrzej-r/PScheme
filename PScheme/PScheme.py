@@ -1479,32 +1479,16 @@ class OrForm(SpecialSyntax):
             else:
                 return self.apply(operands.cdr, callingForm, frame, cont)
         return operands.car.eval(callingForm, frame, step2)
-
-class SpecialIdentifier(SExpression):
-    "Implements a base class for special identifiers."
-    __slots__ = ['name']
-    cache = None
-    typeName = 'an else identifier'
-        
-    @classmethod
-    def make(cls):
-        if cls.cache:
-            return cls.cache
-        self = cls()
-        cls.cache = self
-        return self
     
-    def eval(self, frame, cont):
-        raise SchemeError(self, '%s: invalid context.' % self.name)
-    
-    def __str__(self):
-        return '#<%s>' % self.name
-    
-class ElseIdentifier(SpecialIdentifier):
+class ElseIdentifier(SpecialSyntax):
     "Implements an :c:macro:`else` identifier."
+    def apply(self, operands, callingForm, frame, cont):
+        raise SchemeError(callingForm, '%s: invalid context.' % self.name)
     
-class EGTIdentifier(SpecialIdentifier):
+class EGTIdentifier(SpecialSyntax):
     "Implements an :c:macro:`=>` identifier."
+    def apply(self, operands, callingForm, frame, cont):
+        raise SchemeError(callingForm, '%s: invalid context.' % self.name)
     
 class PrimitiveProcedure(Procedure):
     typeName = 'a primitive procedure'

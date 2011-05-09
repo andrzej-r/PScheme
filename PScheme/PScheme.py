@@ -1090,7 +1090,7 @@ class SpecialSyntax(SExpression):
         return True
         
     def __str__(self):
-        return '#<%s>' % self.name
+        return '#<syntax:%s>' % self.name
     
 class QuoteForm(SpecialSyntax):
     "Implements a :c:macro:`quote` or :c:macro:`'` form."

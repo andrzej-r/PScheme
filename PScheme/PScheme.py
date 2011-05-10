@@ -164,6 +164,9 @@ class SExpression(object):
             
     def eval(self, callingForm, frame, cont):
         raise SchemeError(callingForm, 'Abstract SExpression should not be evaluated directly')
+
+    def quasiQuote(self, level, callingForm, frame, cont):
+        return Trampolined.make(cont, self)
     
     def __ne__(self, other):
         return not (self == other)
@@ -682,7 +685,7 @@ class Null(List):
         return (other is self) #or (type(other) == type(self))
 
 class Pair(List):
-    __slots__ = ['car', 'cdr', 'quasiquoteLevel', 'unquoteSplice', 'meta', 'topLevel']
+    __slots__ = ['car', 'cdr', 'meta', 'topLevel']
     typeName = 'a pair'
     
     @classmethod
@@ -690,8 +693,6 @@ class Pair(List):
         self = cls()
         self.car = car
         self.cdr = cdr
-        self.quasiquoteLevel = 0
-        self.unquoteSplice = False
         return self
     
     @classmethod
@@ -815,7 +816,62 @@ class Pair(List):
             return self.car.eval(callingForm, frame, cont)
         else:
             return self.car.eval(callingForm, frame, step2)
-        
+
+    def quasiQuote(self, level, callingForm, frame, cont):
+        def unsplice(lst, cont):
+            def step2(cdr):
+                return Trampolined.make(cont, Pair.make(lst.car, cdr))
+            if lst.isNull():
+                return self.cdr.quasiQuote(level, callingForm, frame, cont)
+            if not lst.isPair():
+                raise SchemeError(self, 'unquote-splicing returned an improper list.')
+            return unsplice(lst.cdr, step2)
+        def joinLists(listOfLists, cnt2):
+            if listOfLists.isNull():
+                return Trampolined.make(cnt2, listOfLists)
+            car = listOfLists.car
+            if not isinstance(car, List):
+                raise SchemeError(self, 'unquote-splicing operand is not a list.')
+            if listOfLists.cdr.isNull():
+                return Trampolined.make(cnt2, car)
+            def step2(cdr):
+                return Trampolined.make(cnt2, car.append(cdr))
+            return joinLists(listOfLists.cdr, step2)
+        def step2(car):
+            def step3(cdr):
+                #print(car, cdr)
+                if isinstance(cdr, Values):
+                    if len(cdr.values) != 1:
+                        raise SchemeError(self, 'Multi-operand unquote and unquote-splicing are not permitted in a scalar context.')
+                    cdr = cdr.values.car
+                if isinstance(car, Values):
+                    return unsplice(car.values, cont)
+                return Trampolined.make(cont, Pair.make(car, cdr))
+            if car.isSymbol():
+                sframe = frame.resolveSymbolLocation(car)
+                if sframe:
+                    obj = sframe[car.name] 
+                    if isinstance(obj, QuasiQuoteForm):
+                        return self.cdr.quasiQuote(level+1, callingForm, frame, step3)
+                    if isinstance(obj, UnQuoteForm):
+                        if level == 1:
+                            def step4b(rest):
+                                return Trampolined.make(cont, Values.make(rest))
+                            return self.cdr.evalElements(callingForm, frame, step4b)
+                        else:
+                            return self.cdr.quasiQuote(level-1, callingForm, frame, step3)
+                    if isinstance(obj, UnQuoteSplicingForm):
+                        if level == 1:
+                            def step4c(listOfLists):
+                                def step5c(rest):
+                                    return Trampolined.make(cont, Values.make(rest))
+                                return joinLists(listOfLists, step5c)
+                            return self.cdr.evalElements(callingForm, frame, step4c)
+                        else:
+                            return self.cdr.quasiQuote(level-1, callingForm, frame, step3)
+            return self.cdr.quasiQuote(level, callingForm, frame, step3)
+        return self.car.quasiQuote(level, callingForm, frame, step2)
+    
     def isPair(self):
         return True
         
@@ -911,6 +967,22 @@ class Pair(List):
                 return False
             sCdr = sCdr.cdr
             oCdr = oCdr.cdr
+
+class Values(SExpression):
+    __slots__ = ['values']
+    typeName = 'multiple values'
+    
+    @classmethod
+    def make(cls, values):
+        self = cls()
+        self.values = values
+        return self
+    
+    def quasiQuote(self, level, callingForm, frame, cont):
+        return Trampolined.make(cont, self.values)
+    
+    def __str__(self):
+        return '#<values %s 0x%x>' % (str(self.values), id(self))
 
 class Procedure(SExpression):
     __slots__ = []
@@ -1087,94 +1159,28 @@ class QuoteForm(SpecialSyntax):
         res = operands.car
         return Trampolined.make(cont, res)
 
-class QuotedForm(SpecialSyntax):
-    "Helper base class for all :class:`QuasiQuoteForm` related classes."
-    def processExpression(self, expr, callingForm, frame, cont):
-        def unsplice(lst, cont):
-            def step2(cdr):
-                return Trampolined.make(cont, Pair.make(lst.car, cdr))
-            if lst.isNull():
-                return self.processExpression(expr.cdr, callingForm, frame, cont)
-            return unsplice(lst.cdr, step2)
-            
-        if not expr.isPair():
-            return Trampolined.make(cont, expr)
-        else:
-            def step2(car):
-                def step3(cdr):
-                    return Trampolined.make(cont, Pair.make(car, cdr))
-                if car.isPair() and car.unquoteSplice:
-                    return unsplice(car.car, cont) #Trampolined.make(cont, Nil.make())
-                else:
-                    return self.processExpression(expr.cdr, callingForm, frame, step3)
-            expr.quasiquoteLevel = callingForm.quasiquoteLevel
-            if expr.car.isSymbol() and expr.car.name == 'quasiquote':
-                return expr.eval(callingForm, frame, cont)
-            if expr.car.isSymbol() and expr.car.name == 'unquote':
-                return expr.eval(callingForm, frame, cont)
-            if expr.car.isSymbol() and expr.car.name == 'unquote-splicing':
-                return expr.eval(callingForm, frame, cont)
-            return self.processExpression(expr.car, callingForm, frame, step2)
-
-class QuasiQuoteForm(QuotedForm):
+class QuasiQuoteForm(SpecialSyntax):
     "Implements a :c:macro:`quasiquote` or :c:macro:`\`` form."
     def apply(self, operands, callingForm, frame, cont):
-        def step2(expr):
-            if expr.isPair() and expr.unquoteSplice:
-                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
-            if callingForm.quasiquoteLevel == 1:
-                return Trampolined.make(cont, expr)
-            else:
-                form = Pair.makeFromList([Symbol.make("quasiquote"), expr])
-                form.meta = callingForm.meta
-                form.quasiquoteLevel = callingForm.quasiquoteLevel
-                return Trampolined.make(cont, form)
+        def step2(result):
+            if isinstance(result, Values):
+                if len(result.values) != 1:
+                    raise SchemeError(callingForm, '%s: multi-operand unquote and unquote-splicing are not permitted in this context.' % self.name)
+                result = result.values.car
+            return Trampolined.make(cont, result)
         if operands.isNull() or operands.cdr.isPair():
             raise SchemeError(callingForm, '"%s" requires 1 operand, given %d.' % (self.name, len(operands)))
-        callingForm.quasiquoteLevel += 1
-        return self.processExpression(operands.car, callingForm, frame, step2)
+        return operands.car.quasiQuote(1, callingForm, frame, step2)
             
-class UnQuoteForm(QuotedForm):
+class UnQuoteForm(SpecialSyntax):
     "Implements an :c:macro:`unquote` or :c:macro:`,` form."
     def apply(self, operands, callingForm, frame, cont):
-        def step2(expr):
-            if expr.isPair() and expr.unquoteSplice:
-                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
-            form = Pair.makeFromList([Symbol.make("unquote"), expr])
-            form.meta = callingForm.meta
-            form.quasiquoteLevel = callingForm.quasiquoteLevel
-            return Trampolined.make(cont, form)
-        callingForm.quasiquoteLevel -= 1
-        if callingForm.quasiquoteLevel < 0:
-            raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
-        if callingForm.quasiquoteLevel == 0:
-            return operands.car.eval(callingForm, frame, cont)
-        else:
-            return self.processExpression(operands.car, callingForm, frame, step2)
+        raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
 
-class UnQuoteSplicingForm(QuotedForm):
+class UnQuoteSplicingForm(SpecialSyntax):
     "Implements an :c:macro:`unquote-splicing` or :c:macro:`,@` form."
     def apply(self, operands, callingForm, frame, cont):
-        def evaluated(res):
-            if not res.isPair() and not res.isNull():
-                raise SchemeError(callingForm, 'result of "unquote-splicing" is not a list.')
-            res = Pair.make(res, Null.make()) # wrap it with a pair because we must set 'unquoteSplice' and Null is immutable
-            res.unquoteSplice = True
-            return Trampolined.make(cont, res)
-        def expanded(expr):
-            if expr.isPair() and expr.unquoteSplice:
-                raise SchemeError(callingForm, '"unquote-splicing" should not expand directly in "%s".' % self.name)
-            form = Pair.makeFromList([Symbol.make("unquote-splicing"), expr])
-            form.meta = callingForm.meta
-            form.quasiquoteLevel = callingForm.quasiquoteLevel
-            return Trampolined.make(cont, form)
-        callingForm.quasiquoteLevel -= 1
-        if callingForm.quasiquoteLevel < 0:
-            raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
-        if callingForm.quasiquoteLevel == 0:
-            return operands.car.eval(callingForm, frame, evaluated)
-        else:
-            return self.processExpression(operands.car, callingForm, frame, expanded)
+        raise SchemeError(callingForm, '"%s" outside of "quasiquote".' % self.name)
 
 class DefineForm(SpecialSyntax):
     "Implements a :c:macro:`define` form."

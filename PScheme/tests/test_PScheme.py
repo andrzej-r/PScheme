@@ -366,10 +366,33 @@ class PSchemeTest(unittest.TestCase):
         self.assertEqual(self.tpes("`(,@'())"), ["()"])
         self.assertEqual(type(self.tpe("`,@'()")[0]), ErrorExpression)
         self.assertEqual(self.tpes("```(,@,@'())"), ["``(,@,@'())"])
-        self.assertEqual(type(self.tpe("```(,@,@,@'())")[0]), ErrorExpression)
-        self.assertEqual(type(self.tpe("```(,,,@'())")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("```(,@,@,@'())"), ["``(,@(unquote-splicing))"])
+        self.assertEqual(self.tpes("```(,,,@'())"), ["``(,(unquote))"])
         self.assertEqual(self.tpes("```,,,1"), ["``,,1"])
 
+        self.assertEqual(type(self.tpe("`,@(list 1 2)")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("`,@(list 1)"), ["1"])
+        self.assertEqual(self.tpes("`(unquote 1)"), ["1"])
+
+        self.assertEqual(self.tpes("``,,@(list)"), ["`(unquote)"])
+        self.assertEqual(self.tpes("``,,@(list 1)"), ["`,1"])
+        self.assertEqual(self.tpes("``,,@(list 1 2)"), ["`(unquote 1 2)"])
+
+        self.assertEqual(self.tpes("``,@,@(list)"), ["`(unquote-splicing)"])
+        self.assertEqual(self.tpes("``,@,@(list 1)"), ["`,@1"])
+        self.assertEqual(self.tpes("``,@,@(list 1 2)"), ["`(unquote-splicing 1 2)"])
+
+        self.assertEqual(self.tpes("`((unquote-splicing (list 1 2) (list 4 5)))"), ["(1 2 4 5)"])
+        
+        self.assertEqual(self.tpes("(let ((unquote #f)) `(,5))"), ["(,5)"])
+        self.assertEqual(self.tpes("(let ((a unquote)) `((a (+ 1 2)) 1 a (+ 2 3)))"), ["(3 1 . 5)"])
+        #self.assertEqual(self.tpes("(let ((a unquote)) `((a (+ 1 2)) a (+ 2 3)))"), ["(3 . 5)"])
+        self.assertEqual(type(self.tpe("(let ((a unquote)) `((a (+ 1 2)) a (+ 2 3) (+ 3 4)))")[0]), ErrorExpression)
+        self.assertEqual(self.tpes("(let ((a unquote-splicing)) `((a (list 1 2)) (a (list 2 3))))"), ["(1 2 2 3)"])
+        #self.assertEqual(self.tpes("(let ((a unquote-splicing)) `(1 2 a (list 2 3)))"), ["(1 2 2 3)"])
+        self.assertEqual(self.tpes("(let ((a unquote-splicing)) `(1 2 a (list 3)))"), ["(1 2 . 3)"])
+        self.assertEqual(self.tpes("(let ((a quasiquote) (b unquote) (c unquote-splicing)) (a (a (a ((b (b (c '()))))))))"), ["(a (a ((b (b)))))"])
+        
     def test_eqv(self):
         "from R5RS 6.1"
         self.assertEqual(self.tpes("(eqv? 'a 'a)"), ['#t'])

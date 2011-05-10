@@ -77,9 +77,6 @@ class SchemeError(Exception):
         self.expr = expr
         self.msg = msg
         
-    #def __str__(self):
-    #    return unicode(self)
-        
     def __str__(self):
         if not hasattr(self.expr, 'meta'): # in self.expr.__dict__:
             return 'Error: ' + self.msg
@@ -243,7 +240,6 @@ class SelfEval(SExpression):
     
     def eval(self, callingForm, frame, cont):
         return Trampolined.make(cont, self)
-        #return self
         
     def isSelfEval(self):
         return True
@@ -307,8 +303,6 @@ class Char(SelfEval):
     
     @classmethod
     def parseToken(cls, token, tokens=[]):
-        #match = cls.pchar.match(token.text)
-        #char = cls.make(match.group(1))
         char = cls.pchar.match(token.text)
         charCode = cls.pcharcode.match(token.text)
         if token.text in cls.name2char:
@@ -327,7 +321,6 @@ class Char(SelfEval):
         else:
             raise SchemeError(token, 'Unknown character name.')
         char = cls.make(string)
-        #char.meta = token.meta
         return char
 
     def isChar(self):
@@ -473,28 +466,14 @@ class IntegerNumber(Number):
         if 0 <= value < 256:
             cached = cls.cache[value]
             if cached:
-                #print '*', cached.value
                 return cached
             self = cls()
             self.value = value
             cls.cache[value] = self
-            #print ' ', self.value
             return self
         self = cls()
         self.value = value
-        #print ' ', self.value
         return self
-
-    #@classmethod
-    #def makeUnCached(cls, value, meta):
-    #    """
-    #    Construct an ``IntegerNumber`` object without caching.
-    #    Unique objects are needed when ``meta`` is attached.
-    #    """
-    #    self = cls()
-    #    self.value = value
-    #    self.meta = meta
-    #    return self
 
     def isInteger(self):
         return True
@@ -539,21 +518,12 @@ class Boolean(SelfEval):
         cls.cache[value] = self
         return self
 
-    #@classmethod
-    #def makeUnCached(cls, value, meta):
-    #    self = cls()
-    #    self.value = value
-    #    self.meta = meta
-    #    return self
-
     @classmethod
     def parseToken(cls, token, tokens=[]):
         if (token.text == '#f'):
             bool = Boolean.make(False)
-            #bool = Boolean.makeUnCached(False, token.meta)
         else:
             bool = Boolean.make(True)
-            #bool = Boolean.makeUnCached(True, token.meta)
         return bool
 
     def __str__(self):
@@ -567,8 +537,6 @@ class Boolean(SelfEval):
         
     def __eq__(self, other):
         return (other is self) or (type(other) != type(self) and self.value)
-        #return (other is self) or (type(other) == type(self) and other.value == self.value) or (type(other) != type(self) and self.value)
-        #return (other is self) or (other.value == self.value) or (not other.isBoolean() and self.value)
         
 class ErrorExpression(SelfEval):
     """
@@ -600,19 +568,11 @@ class Symbol(SExpression):
         cls.cache[name] = self
         return self
         
-    #@classmethod
-    #def makeUnCached(cls, name, meta):
-    #    self = cls()
-    #    self.name = name
-    #    self.meta = meta
-    #    return self
-        
     @classmethod
     def parseToken(cls, token):
         sym = Symbol.make(token.text)
-        #sym = Symbol.makeUnCached(token.text, token.meta)
         return sym
-        
+    
     def eval(self, callingForm, frame, cont):
         return Trampolined.make(cont, frame.resolveSymbol(self, callingForm))
 
@@ -641,12 +601,6 @@ class Null(List):
         self = cls()
         cls.cache = self
         return self
-    
-    #@classmethod
-    #def makeUnCached(cls, meta):
-    #    self = cls()
-    #    self.meta = meta
-    #    return self
     
     def eval(self, callingForm, frame, cont):
         raise SchemeError(callingForm, 'Empty application.')
@@ -791,9 +745,6 @@ class Pair(List):
             return self.cdr.evalElements(callingForm, frame, step3, SchemeError(self, '"eval": improper operand list'))
         if self.car.isSymbol() and isinstance(frame.resolveSymbol(self.car, callingForm), SpecialSyntax):
             return frame.resolveSymbol(self.car, callingForm).apply(self.cdr, self, frame, cont)
-        #    return SpecialSyntax.resolveSymbol(self.car, callingForm).apply(self.cdr, self, frame, cont)
-        #if self.car.isSymbol() and self.car.name in SpecialSyntax.specialForms and frame.resolveSymbolLocation(self.car) == None:
-        #    return SpecialSyntax.resolveSymbol(self.car, callingForm).apply(self.cdr, self, frame, cont)
         return self.car.eval(callingForm, frame, step2)
 
     def evalElements(self, callingForm, frame, cont, excp=None):
@@ -1003,16 +954,10 @@ class Procedure(SExpression):
         if len(self.operandsNo) > 1:
             maxOperands = self.operandsNo[1]
             if not minOperands <= lenOperands <= maxOperands:
-                if minOperands == maxOperands == 1: #for English grammar
-                    raise SchemeError(callingForm, '"%s" requires %d operand, provided %d.'% (self.name, minOperands, lenOperands))
                 if minOperands == maxOperands:
                     raise SchemeError(callingForm, '"%s" requires %d operands, provided %d.'% (self.name, minOperands, lenOperands))
-                if minOperands == 1: #for English grammar
-                    raise SchemeError(callingForm, '"%s" requires %d operand, provided %d.'% (self.name, minOperands, lenOperands))
                 raise SchemeError(callingForm, '"%s" requires at least %d operands and at most %d operands, provided %d.'% (self.name, minOperands, maxOperands, lenOperands))
         elif not minOperands <= lenOperands:
-            if minOperands == 1: #for English grammar
-                raise SchemeError(callingForm, '"%s" requires at least 1 operand, provided %d.'% (self.name, lenOperands))
             raise SchemeError(callingForm, '"%s" requires at least %d operands, provided %d.'% (self.name, minOperands, lenOperands))
 
         last = len(self.operandTypes) - 1
@@ -1059,7 +1004,6 @@ class CompoundProcedure(Procedure):
         self = cls()
         self.formals = formals
         self.body = body
-        #self.body = Body.make(body, meta)
         self.frame = frame
         self.checkFormals()
         self.meta = meta
@@ -1112,8 +1056,6 @@ class Trampolined(SExpression):
 
     @classmethod
     def make(cls, continuation, operand):
-        #if continuation == None:
-        #    return operand
         self = cls()
         self.continuation = continuation
         self.operand = operand
@@ -1185,8 +1127,6 @@ class UnQuoteSplicingForm(SpecialSyntax):
 class DefineForm(SpecialSyntax):
     "Implements a :c:macro:`define` form."
     def apply(self, operands, callingForm, frame, cont):
-        #if not self.topLevel: # and not self.inBody:
-        #    raise SchemeError(self, '"define" only allowed at the top level or in a body of a procedure')
         if operands.isNull() or operands.cdr.isNull():
             raise SchemeError(callingForm, '"%s" requires at least 2 operands, given %d.' % (self.name, len(operands)))
         firstArg = operands.car
@@ -1235,7 +1175,6 @@ class LetForm(SpecialSyntax):
             if binding.car.name in newFrame.symbols:
                 raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
             newFrame.setSymbolValue(binding.car, bindingValue)
-            #newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, oldFrame, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, newFrame)
@@ -1261,11 +1200,8 @@ class LetStarForm(SpecialSyntax):
         def step2(bindingValue):
             if not binding.car.isSymbol():
                 raise SchemeError(callingForm, '"%s": incorrect binding form (first element is not a symbol).' % self.name)
-            #if binding.car.name in newFrame.symbols:
-            #    raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
             newFrame = Frame.make(frame)
             newFrame.setSymbolValue(binding.car, bindingValue)
-            #newFrame.symbols[binding.car.name] = bindingValue
             return self.processBindings(bindings.cdr, callingForm, newFrame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, frame)
@@ -1306,9 +1242,7 @@ class LetrecForm(SpecialSyntax):
         if binding.car.name in newFrame.symbols:
             raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
         newFrame.setSymbolValue(binding.car, Nil.make())
-        #newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
-        #return binding.cdr.car.eval(callingForm, oldFrame, step2)
 
     def evalInits(self, bindings, callingForm, frame, cont):
         def step2(initValue):
@@ -1325,7 +1259,6 @@ class LetrecForm(SpecialSyntax):
         binding = bindings.car.car
         init = inits.car
         frame.setSymbolValue(binding, init)
-        #frame.symbols[binding.name] = init
         return self.bindValues(bindings.cdr, inits.cdr, callingForm, frame, cont)
 
 class LetrecStarForm(SpecialSyntax):
@@ -1354,13 +1287,11 @@ class LetrecStarForm(SpecialSyntax):
         if binding.car.name in newFrame.symbols:
             raise SchemeError(callingForm, '"%s": multiple uses of the same variable in the binding form.' % self.name)
         newFrame.setSymbolValue(binding.car, Nil.make())
-        #newFrame.symbols[binding.car.name] = Nil.make()
         return self.processBindingVariables(bindings.cdr, callingForm, oldFrame, newFrame, cont)
 
     def evalInits(self, bindings, callingForm, frame, cont):
         def step2(bindingValue):
             frame.setSymbolValue(bindings.car.car, bindingValue)
-            #frame.symbols[bindings.car.car.name] = bindingValue
             return self.evalInits(bindings.cdr, callingForm, frame, cont)
         if bindings.isNull():
             return Trampolined.make(cont, frame)
@@ -1995,10 +1926,7 @@ class Frame(SExpression):
     
     @classmethod
     def make(cls, parentFrame):
-        #if cls.cache:
-        #    return cls.cache
         self = cls()
-        #cls.cache = self
         self.parentFrame = parentFrame
         self.symbols = {}
         return self
@@ -2039,14 +1967,10 @@ class Frame(SExpression):
 class NullFrame(Frame):
     __slots__ = []
     typeName = 'a null environment frame'
-    #cache = None
 
     @classmethod
     def make(cls):
-        #if cls.cache:
-        #    return cls.cache
         self = cls()
-        #cls.cache = self
         self.symbols = {
             #pairs
             'null?':            IsNullProcedure.make(),
